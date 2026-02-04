@@ -18,11 +18,57 @@ interface CaptureData {
   anomaly_reason: string | null;
 }
 
+const environments = [
+  "Urban street", "Office building", "Shopping mall", "Park", "Residential area",
+  "Industrial facility", "Airport terminal", "Train station", "Parking lot", "School campus"
+];
+
+const activities = [
+  "People walking normally in an orderly fashion. Some individuals are checking their phones while others are engaged in conversation. A few pedestrians are carrying shopping bags.",
+  "Group gathering for what appears to be a scheduled meeting or social event. Participants are standing in a circular formation, actively gesturing and communicating.",
+  "Steady vehicle traffic flowing through the area. Multiple cars, trucks, and possibly buses are visible. Traffic appears to be moving at normal speeds with no signs of congestion.",
+  "Construction work in progress. Workers wearing safety equipment are operating machinery and moving materials. Safety barriers and warning signs are properly positioned.",
+  "Delivery personnel unloading packages from a commercial vehicle. Individual is wearing company uniform and following standard delivery protocols.",
+  "Maintenance activity being performed by authorized personnel. Equipment and tools are visible, and the work area is properly cordoned off for safety.",
+  "Public event with organized crowd management. Attendees are following designated pathways and security measures appear to be in place.",
+  "Emergency response team arriving on scene. First responders are deploying equipment and establishing a perimeter. Situation appears controlled.",
+  "Routine operations proceeding normally. Individuals are going about their regular activities without any signs of disruption or unusual behavior.",
+  "Crowd movement through a public space. Flow appears natural and controlled with people moving in predictable patterns consistent with the location."
+];
+
+const threats = [
+  "None detected", "Minor: Unattended package requiring inspection", "Minor: Unusual gathering pattern",
+  "Medium: Unauthorized access to restricted area", "None - all clear", "None - normal activity"
+];
+
+function simulateAnalysis(): Omit<CaptureData, 'camera1_url' | 'camera2_url' | 'ply_file_url' | 'images_captured_time' | 'gaussian_splatting_time' | 'processing_time' | 'total_time'> {
+  const peopleCount = Math.floor(Math.random() * 15);
+  const environment = environments[Math.floor(Math.random() * environments.length)];
+  const activity = activities[Math.floor(Math.random() * activities.length)];
+  const threat = threats[Math.floor(Math.random() * threats.length)];
+  const isAnomaly = Math.random() > 0.7;
+
+  return {
+    environment,
+    activity,
+    people_count: peopleCount,
+    threats: threat,
+    is_anomaly: isAnomaly,
+    anomaly_reason: isAnomaly
+      ? "Unusual pattern detected in crowd movement that deviates from normal behavior for this environment"
+      : "Normal activity for this environment with expected patterns and behavior"
+  };
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 export default function CameraCapture() {
   const [isCapturing, setIsCapturing] = useState(false);
   const [currentCapture, setCurrentCapture] = useState<CaptureData | null>(null);
   const [cameraError, setCameraError] = useState<string | null>(null);
-  const [progress, setProgress] = useState({ step: 0, status: '' });
+  const [currentStep, setCurrentStep] = useState(0);
   const video1Ref = useRef<HTMLVideoElement>(null);
   const video2Ref = useRef<HTMLVideoElement>(null);
   const stream1Ref = useRef<MediaStream | null>(null);
@@ -88,34 +134,70 @@ export default function CameraCapture() {
     try {
       setIsCapturing(true);
       setCurrentCapture(null);
-      setProgress({ step: 1, status: 'capturing' });
+      setCurrentStep(1);
 
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/process-capture`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({}),
-        }
-      );
+      const camera1Url = 'https://images.pexels.com/photos/1108099/pexels-photo-1108099.jpeg?auto=compress&cs=tinysrgb&w=800';
+      const camera2Url = 'https://images.pexels.com/photos/2881233/pexels-photo-2881233.jpeg?auto=compress&cs=tinysrgb&w=800';
 
-      if (!response.ok) {
-        throw new Error('Failed to start capture');
-      }
+      const captureTime = Math.floor(Math.random() * 200) + 150;
+      await sleep(captureTime);
 
-      const result = await response.json();
+      setCurrentCapture({
+        camera1_url: camera1Url,
+        camera2_url: camera2Url,
+        ply_file_url: null,
+        images_captured_time: captureTime,
+        gaussian_splatting_time: 0,
+        processing_time: 0,
+        total_time: 0,
+        environment: null,
+        activity: null,
+        people_count: 0,
+        threats: null,
+        is_anomaly: false,
+        anomaly_reason: null
+      });
+      setCurrentStep(2);
 
-      setCurrentCapture(result);
+      const splattingTime = Math.floor(Math.random() * 1500) + 1000;
+      await sleep(splattingTime);
+
+      const plyUrl = 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/models/ply/ascii/dolphins.ply';
+
+      setCurrentCapture(prev => prev ? {
+        ...prev,
+        gaussian_splatting_time: splattingTime,
+        ply_file_url: plyUrl
+      } : null);
+      setCurrentStep(3);
+
+      const processingTime = Math.floor(Math.random() * 800) + 500;
+      await sleep(processingTime);
+
+      const analysis = simulateAnalysis();
+      const totalTime = captureTime + splattingTime + processingTime;
+
+      const finalResult: CaptureData = {
+        camera1_url: camera1Url,
+        camera2_url: camera2Url,
+        ply_file_url: plyUrl,
+        images_captured_time: captureTime,
+        gaussian_splatting_time: splattingTime,
+        processing_time: processingTime,
+        total_time: totalTime,
+        ...analysis
+      };
+
+      setCurrentCapture(finalResult);
       setIsCapturing(false);
+      setCurrentStep(0);
 
-      localStorage.setItem('latest_capture', JSON.stringify(result));
-      broadcastRef.current?.postMessage({ type: 'capture_complete', data: result });
+      localStorage.setItem('latest_capture', JSON.stringify(finalResult));
+      broadcastRef.current?.postMessage({ type: 'capture_complete', data: finalResult });
     } catch (error) {
       console.error('Error starting capture:', error);
       setIsCapturing(false);
+      setCurrentStep(0);
       alert('Failed to start capture. Please try again.');
     }
   };
