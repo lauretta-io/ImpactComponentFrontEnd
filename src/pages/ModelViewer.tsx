@@ -333,26 +333,36 @@ export default function ModelViewer() {
       return;
     }
 
-    const validExtensions = ['.ply', '.gltf', '.glb'];
+    const validExtensions = ['.ply', '.gltf', '.glb', '.bin'];
     const fileArray = Array.from(files);
     console.log('File array:', fileArray.map(f => f.name));
 
-    const validFile = fileArray.find((file) => {
+    // Look for main model file (.ply, .gltf, or .glb)
+    const mainFile = fileArray.find((file) => {
       const ext = '.' + file.name.toLowerCase().split('.').pop();
-      const isValid = validExtensions.includes(ext);
+      const isValid = ['.ply', '.gltf', '.glb'].includes(ext);
       console.log(`Checking ${file.name}, extension: ${ext}, valid: ${isValid}`);
       return isValid;
     });
 
-    if (validFile) {
-      console.log('Valid file found:', validFile.name, 'Size:', validFile.size, 'bytes');
-      const url = URL.createObjectURL(validFile);
+    if (mainFile) {
+      console.log('Main file found:', mainFile.name, 'Size:', mainFile.size, 'bytes');
+
+      // Check if there's an accompanying .bin file for .gltf
+      const fileExtension = mainFile.name.toLowerCase().split('.').pop() || '';
+      if (fileExtension === 'gltf') {
+        const binFile = fileArray.find(f => f.name.toLowerCase().endsWith('.bin'));
+        if (binFile) {
+          console.log('Found accompanying .bin file:', binFile.name);
+        }
+      }
+
+      const url = URL.createObjectURL(mainFile);
       console.log('Blob URL created:', url);
-      const fileExtension = validFile.name.toLowerCase().split('.').pop() || '';
       console.log('File extension:', fileExtension);
       loadModel(url, fileExtension);
     } else {
-      const errorMsg = 'No valid .ply or .gltf files found';
+      const errorMsg = 'No valid .ply, .gltf, or .glb files found';
       setError(errorMsg);
       console.error(errorMsg, 'Files:', fileArray.map(f => f.name));
     }
@@ -387,7 +397,7 @@ export default function ModelViewer() {
           <div className="text-center">
             <div className="text-gray-400 text-2xl mb-4">No Model Loaded</div>
             <div className="text-gray-500 text-sm">
-              Capture images from the Camera page or upload .ply/.gltf files
+              Capture images from the Camera page or upload .ply/.gltf/.glb files
             </div>
           </div>
         </div>
@@ -421,7 +431,7 @@ export default function ModelViewer() {
           Load Model Files
           <input
             type="file"
-            accept=".ply,.gltf,.glb"
+            accept=".ply,.gltf,.glb,.bin"
             multiple
             onChange={handleFileUpload}
             className="hidden"
