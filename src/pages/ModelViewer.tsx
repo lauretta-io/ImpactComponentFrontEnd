@@ -107,7 +107,24 @@ export default function ModelViewer() {
     }
   };
 
-  const loadModel = (url: string) => {
+  const disposeModel = (model: any) => {
+    if (!model) return;
+
+    model.traverse((child: any) => {
+      if (child.geometry) {
+        child.geometry.dispose();
+      }
+      if (child.material) {
+        if (Array.isArray(child.material)) {
+          child.material.forEach((mat: any) => mat.dispose());
+        } else {
+          child.material.dispose();
+        }
+      }
+    });
+  };
+
+  const loadModel = (url: string, explicitExtension?: string) => {
     if (!sceneRef.current) return;
 
     setIsLoading(true);
@@ -115,16 +132,14 @@ export default function ModelViewer() {
 
     if (modelRef.current) {
       sceneRef.current.remove(modelRef.current);
-      modelRef.current.geometry.dispose();
-      if (Array.isArray(modelRef.current.material)) {
-        modelRef.current.material.forEach((mat) => mat.dispose());
-      } else {
-        modelRef.current.material.dispose();
-      }
+      disposeModel(modelRef.current);
+      modelRef.current = null;
     }
 
-    const fileExtension = url.toLowerCase().split('.').pop();
+    const fileExtension = explicitExtension || url.toLowerCase().split('.').pop();
     const isGLTF = fileExtension === 'gltf' || fileExtension === 'glb';
+
+    console.log('Loading file with extension:', fileExtension, 'isGLTF:', isGLTF);
 
     if (isGLTF) {
       const loader = new GLTFLoader();
@@ -132,6 +147,16 @@ export default function ModelViewer() {
         url,
         (gltf) => {
           const model = gltf.scene;
+
+          model.traverse((child: any) => {
+            if (child.isMesh) {
+              child.castShadow = true;
+              child.receiveShadow = true;
+              if (child.material) {
+                child.material.needsUpdate = true;
+              }
+            }
+          });
 
           const box = new THREE.Box3().setFromObject(model);
           const center = new THREE.Vector3();
@@ -149,11 +174,13 @@ export default function ModelViewer() {
           setHasModel(true);
           setIsLoading(false);
         },
-        undefined,
+        (progress) => {
+          console.log('Loading progress:', (progress.loaded / progress.total) * 100, '%');
+        },
         (error) => {
           setError('Failed to load glTF file');
           setIsLoading(false);
-          console.error(error);
+          console.error('glTF loading error:', error);
         }
       );
     } else {
@@ -161,6 +188,7 @@ export default function ModelViewer() {
       loader.load(
         url,
         (geometry) => {
+          console.log('PLY loaded, vertices:', geometry.attributes.position?.count);
           geometry.computeVertexNormals();
           const material = new THREE.MeshStandardMaterial({
             color: 0x00a8ff,
@@ -185,12 +213,15 @@ export default function ModelViewer() {
           modelRef.current = mesh;
           setHasModel(true);
           setIsLoading(false);
+          console.log('PLY model added to scene');
         },
-        undefined,
+        (progress) => {
+          console.log('PLY loading progress:', (progress.loaded / progress.total) * 100, '%');
+        },
         (error) => {
           setError('Failed to load PLY file');
           setIsLoading(false);
-          console.error(error);
+          console.error('PLY loading error:', error);
         }
       );
     }
@@ -209,10 +240,13 @@ export default function ModelViewer() {
     });
 
     if (validFile) {
+      console.log('Loading file:', validFile.name);
       const url = URL.createObjectURL(validFile);
-      loadModel(url);
+      const fileExtension = validFile.name.toLowerCase().split('.').pop() || '';
+      loadModel(url, fileExtension);
     } else {
       setError('No valid .ply or .gltf files found');
+      console.error('No valid files found in:', fileArray.map(f => f.name));
     }
   };
 
