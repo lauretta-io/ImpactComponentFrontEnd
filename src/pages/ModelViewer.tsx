@@ -235,29 +235,32 @@ export default function ModelViewer() {
           return response.arrayBuffer();
         })
         .then(buffer => {
-          // Validate PLY header
-          const headerView = new Uint8Array(buffer, 0, Math.min(1000, buffer.byteLength));
+          // Read larger portion to find the complete header
+          const searchSize = Math.min(10000, buffer.byteLength);
+          const headerView = new Uint8Array(buffer, 0, searchSize);
           const headerText = new TextDecoder('utf-8').decode(headerView);
 
-          console.log('PLY file header (first 500 chars):', headerText.substring(0, 500));
+          console.log('=== PLY File Analysis ===');
+          console.log('File size:', buffer.byteLength, 'bytes');
+          console.log('File header (first 1000 chars):\n', headerText.substring(0, 1000));
 
           if (!headerText.startsWith('ply')) {
-            throw new Error('Invalid PLY file: Missing "ply" magic header');
+            throw new Error('Invalid PLY file: Missing "ply" magic header. This may not be a PLY file.');
           }
 
           // Check for format line
           const formatMatch = headerText.match(/format\s+(ascii|binary_little_endian|binary_big_endian)\s+[\d.]+/);
           if (!formatMatch) {
-            throw new Error('Invalid PLY file: Missing format specification');
+            throw new Error('Invalid PLY file: Missing format specification. File may be corrupted.');
           }
 
           const format = formatMatch[1];
-          console.log('PLY format detected:', format);
+          console.log('PLY format:', format);
 
           // Check for vertex count
           const vertexMatch = headerText.match(/element\s+vertex\s+(\d+)/);
           if (!vertexMatch) {
-            throw new Error('Invalid PLY file: No vertex element defined');
+            throw new Error('Invalid PLY file: No vertex element defined. File may be corrupted.');
           }
 
           const vertexCount = parseInt(vertexMatch[1], 10);
@@ -269,8 +272,15 @@ export default function ModelViewer() {
 
           // Check header ends properly
           if (!headerText.includes('end_header')) {
-            throw new Error('Invalid PLY file: Missing end_header marker');
+            console.error('ERROR: end_header marker not found in first', searchSize, 'bytes');
+            console.error('This usually means:');
+            console.error('1. The PLY file is corrupted or incomplete');
+            console.error('2. The file was not fully uploaded/downloaded');
+            console.error('3. The file is not a valid PLY file');
+            throw new Error(`Invalid PLY file: Missing end_header marker. File may be corrupted or incomplete. (Searched ${searchSize} bytes)`);
           }
+
+          console.log('PLY header validation passed');
 
           const loader = new PLYLoader();
 
