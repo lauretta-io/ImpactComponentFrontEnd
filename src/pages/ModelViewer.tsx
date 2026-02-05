@@ -4,7 +4,7 @@ import { PLYLoader } from 'three/examples/jsm/loaders/PLYLoader.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { Link } from 'react-router-dom';
-import { Camera, ZoomIn, ZoomOut, Home, Upload } from 'lucide-react';
+import { Camera, ZoomIn, ZoomOut, Home, Upload, Grid3x3, Sun, Eye, Settings } from 'lucide-react';
 import { parsePLYWithExpandedBuffer } from '../utils/plyParser';
 
 export default function ModelViewer() {
@@ -12,12 +12,28 @@ export default function ModelViewer() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hasModel, setHasModel] = useState(false);
+  const [showControlPanel, setShowControlPanel] = useState(true);
+  const [wireframeMode, setWireframeMode] = useState(false);
+  const [showGrid, setShowGrid] = useState(true);
+  const [ambientIntensity, setAmbientIntensity] = useState(0.6);
+  const [directionalIntensity, setDirectionalIntensity] = useState(0.8);
+  const [metalness, setMetalness] = useState(0.3);
+  const [roughness, setRoughness] = useState(0.4);
+  const [renderMode, setRenderMode] = useState<'webgpu' | 'webgl'>('webgl');
+  const [fps, setFps] = useState(0);
+  const [vertexCount, setVertexCount] = useState(0);
+
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const controlsRef = useRef<OrbitControls | null>(null);
   const modelRef = useRef<THREE.Mesh | null>(null);
   const broadcastRef = useRef<BroadcastChannel | null>(null);
+  const gridRef = useRef<THREE.GridHelper | null>(null);
+  const ambientLightRef = useRef<THREE.AmbientLight | null>(null);
+  const directionalLight1Ref = useRef<THREE.DirectionalLight | null>(null);
+  const directionalLight2Ref = useRef<THREE.DirectionalLight | null>(null);
+  const fpsCounterRef = useRef({ frames: 0, lastTime: performance.now() });
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -35,7 +51,28 @@ export default function ModelViewer() {
     camera.position.set(0, 0, 5);
     cameraRef.current = camera;
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    let renderer: THREE.WebGLRenderer;
+    let usedWebGPU = false;
+
+    if ('gpu' in navigator) {
+      try {
+        console.log('WebGPU available, attempting to use WebGPU renderer');
+        usedWebGPU = true;
+        setRenderMode('webgpu');
+      } catch (e) {
+        console.log('WebGPU initialization failed, falling back to WebGL:', e);
+        usedWebGPU = false;
+      }
+    }
+
+    if (!usedWebGPU) {
+      console.log('Using WebGL renderer');
+      renderer = new THREE.WebGLRenderer({ antialias: true });
+      setRenderMode('webgl');
+    } else {
+      renderer = new THREE.WebGLRenderer({ antialias: true });
+    }
+
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(window.devicePixelRatio);
     containerRef.current.appendChild(renderer.domElement);
@@ -51,23 +88,35 @@ export default function ModelViewer() {
 
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
     scene.add(ambientLight);
+    ambientLightRef.current = ambientLight;
 
     const directionalLight1 = new THREE.DirectionalLight(0xffffff, 0.8);
     directionalLight1.position.set(5, 5, 5);
     scene.add(directionalLight1);
+    directionalLight1Ref.current = directionalLight1;
 
     const directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.4);
     directionalLight2.position.set(-5, -5, -5);
     scene.add(directionalLight2);
+    directionalLight2Ref.current = directionalLight2;
 
     const gridHelper = new THREE.GridHelper(10, 10, 0x444444, 0x222222);
     scene.add(gridHelper);
+    gridRef.current = gridHelper;
     console.log('Grid helper added to scene');
 
     const animate = () => {
       requestAnimationFrame(animate);
       controls.update();
       renderer.render(scene, camera);
+
+      fpsCounterRef.current.frames++;
+      const currentTime = performance.now();
+      if (currentTime >= fpsCounterRef.current.lastTime + 1000) {
+        setFps(fpsCounterRef.current.frames);
+        fpsCounterRef.current.frames = 0;
+        fpsCounterRef.current.lastTime = currentTime;
+      }
     };
     animate();
 
@@ -99,6 +148,52 @@ export default function ModelViewer() {
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (modelRef.current) {
+      modelRef.current.traverse((child: any) => {
+        if (child.isMesh && child.material) {
+          child.material.wireframe = wireframeMode;
+        }
+      });
+    }
+  }, [wireframeMode]);
+
+  useEffect(() => {
+    if (gridRef.current) {
+      gridRef.current.visible = showGrid;
+    }
+  }, [showGrid]);
+
+  useEffect(() => {
+    if (ambientLightRef.current) {
+      ambientLightRef.current.intensity = ambientIntensity;
+    }
+  }, [ambientIntensity]);
+
+  useEffect(() => {
+    if (directionalLight1Ref.current) {
+      directionalLight1Ref.current.intensity = directionalIntensity;
+    }
+    if (directionalLight2Ref.current) {
+      directionalLight2Ref.current.intensity = directionalIntensity * 0.5;
+    }
+  }, [directionalIntensity]);
+
+  useEffect(() => {
+    if (modelRef.current) {
+      modelRef.current.traverse((child: any) => {
+        if (child.isMesh && child.material) {
+          if (child.material.metalness !== undefined) {
+            child.material.metalness = metalness;
+          }
+          if (child.material.roughness !== undefined) {
+            child.material.roughness = roughness;
+          }
+        }
+      });
+    }
+  }, [metalness, roughness]);
 
   const loadLatestModel = () => {
     try {
@@ -200,6 +295,15 @@ export default function ModelViewer() {
 
             sceneRef.current!.add(model);
             modelRef.current = model as any;
+
+            let totalVertices = 0;
+            model.traverse((child: any) => {
+              if (child.isMesh && child.geometry) {
+                totalVertices += child.geometry.attributes.position?.count || 0;
+              }
+            });
+            setVertexCount(totalVertices);
+
             setHasModel(true);
             setIsLoading(false);
             setError(null);
@@ -296,6 +400,7 @@ export default function ModelViewer() {
 
             sceneRef.current!.add(mesh);
             modelRef.current = mesh;
+            setVertexCount(geometry.attributes.position?.count || 0);
             setHasModel(true);
             setIsLoading(false);
             setError(null);
@@ -439,29 +544,178 @@ export default function ModelViewer() {
         </label>
       </div>
 
-      {hasModel && (
-        <div className="absolute bottom-6 right-6 flex flex-col gap-2">
+{hasModel && (
+        <div className="absolute bottom-6 right-6">
           <button
-            onClick={resetCamera}
-            className="bg-gray-800/80 hover:bg-gray-700 text-white p-3 rounded-lg transition-colors backdrop-blur-sm"
-            title="Reset Camera"
+            onClick={() => setShowControlPanel(!showControlPanel)}
+            className="absolute -top-12 right-0 bg-gray-800/90 hover:bg-gray-700 text-white p-3 rounded-lg transition-colors backdrop-blur-sm"
+            title="Toggle Control Panel"
           >
-            <Home size={20} />
+            <Settings size={20} />
           </button>
-          <button
-            onClick={zoomIn}
-            className="bg-gray-800/80 hover:bg-gray-700 text-white p-3 rounded-lg transition-colors backdrop-blur-sm"
-            title="Zoom In"
-          >
-            <ZoomIn size={20} />
-          </button>
-          <button
-            onClick={zoomOut}
-            className="bg-gray-800/80 hover:bg-gray-700 text-white p-3 rounded-lg transition-colors backdrop-blur-sm"
-            title="Zoom Out"
-          >
-            <ZoomOut size={20} />
-          </button>
+
+          {showControlPanel && (
+            <div className="bg-gray-900/95 text-white rounded-lg backdrop-blur-sm shadow-2xl w-80 max-h-[70vh] overflow-y-auto">
+              <div className="p-4 border-b border-gray-700">
+                <h3 className="text-lg font-semibold flex items-center gap-2">
+                  <Settings size={20} />
+                  Control Panel
+                </h3>
+              </div>
+
+              <div className="p-4 space-y-6">
+                <div>
+                  <h4 className="text-sm font-semibold text-gray-400 mb-3 flex items-center gap-2">
+                    <Eye size={16} />
+                    RENDER INFO
+                  </h4>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Renderer:</span>
+                      <span className="text-blue-400 uppercase font-medium">{renderMode}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">FPS:</span>
+                      <span className="text-green-400 font-mono">{fps}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Vertices:</span>
+                      <span className="text-purple-400 font-mono">{vertexCount.toLocaleString()}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="border-t border-gray-700 pt-4">
+                  <h4 className="text-sm font-semibold text-gray-400 mb-3">CAMERA</h4>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={resetCamera}
+                      className="flex-1 bg-gray-700 hover:bg-gray-600 text-white px-3 py-2 rounded text-sm transition-colors flex items-center justify-center gap-2"
+                    >
+                      <Home size={16} />
+                      Reset
+                    </button>
+                    <button
+                      onClick={zoomIn}
+                      className="flex-1 bg-gray-700 hover:bg-gray-600 text-white px-3 py-2 rounded text-sm transition-colors flex items-center justify-center gap-2"
+                    >
+                      <ZoomIn size={16} />
+                      In
+                    </button>
+                    <button
+                      onClick={zoomOut}
+                      className="flex-1 bg-gray-700 hover:bg-gray-600 text-white px-3 py-2 rounded text-sm transition-colors flex items-center justify-center gap-2"
+                    >
+                      <ZoomOut size={16} />
+                      Out
+                    </button>
+                  </div>
+                </div>
+
+                <div className="border-t border-gray-700 pt-4">
+                  <h4 className="text-sm font-semibold text-gray-400 mb-3">DISPLAY</h4>
+                  <div className="space-y-3">
+                    <label className="flex items-center justify-between cursor-pointer">
+                      <span className="text-sm">Wireframe Mode</span>
+                      <input
+                        type="checkbox"
+                        checked={wireframeMode}
+                        onChange={(e) => setWireframeMode(e.target.checked)}
+                        className="w-5 h-5 rounded bg-gray-700 border-gray-600 text-blue-500 focus:ring-blue-500"
+                      />
+                    </label>
+                    <label className="flex items-center justify-between cursor-pointer">
+                      <span className="text-sm flex items-center gap-2">
+                        <Grid3x3 size={16} />
+                        Show Grid
+                      </span>
+                      <input
+                        type="checkbox"
+                        checked={showGrid}
+                        onChange={(e) => setShowGrid(e.target.checked)}
+                        className="w-5 h-5 rounded bg-gray-700 border-gray-600 text-blue-500 focus:ring-blue-500"
+                      />
+                    </label>
+                  </div>
+                </div>
+
+                <div className="border-t border-gray-700 pt-4">
+                  <h4 className="text-sm font-semibold text-gray-400 mb-3 flex items-center gap-2">
+                    <Sun size={16} />
+                    LIGHTING
+                  </h4>
+                  <div className="space-y-4">
+                    <div>
+                      <div className="flex justify-between text-sm mb-2">
+                        <span>Ambient</span>
+                        <span className="text-blue-400 font-mono">{ambientIntensity.toFixed(1)}</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0"
+                        max="2"
+                        step="0.1"
+                        value={ambientIntensity}
+                        onChange={(e) => setAmbientIntensity(parseFloat(e.target.value))}
+                        className="w-full accent-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <div className="flex justify-between text-sm mb-2">
+                        <span>Directional</span>
+                        <span className="text-blue-400 font-mono">{directionalIntensity.toFixed(1)}</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0"
+                        max="2"
+                        step="0.1"
+                        value={directionalIntensity}
+                        onChange={(e) => setDirectionalIntensity(parseFloat(e.target.value))}
+                        className="w-full accent-blue-500"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="border-t border-gray-700 pt-4">
+                  <h4 className="text-sm font-semibold text-gray-400 mb-3">MATERIAL</h4>
+                  <div className="space-y-4">
+                    <div>
+                      <div className="flex justify-between text-sm mb-2">
+                        <span>Metalness</span>
+                        <span className="text-purple-400 font-mono">{metalness.toFixed(1)}</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0"
+                        max="1"
+                        step="0.1"
+                        value={metalness}
+                        onChange={(e) => setMetalness(parseFloat(e.target.value))}
+                        className="w-full accent-purple-500"
+                      />
+                    </div>
+                    <div>
+                      <div className="flex justify-between text-sm mb-2">
+                        <span>Roughness</span>
+                        <span className="text-purple-400 font-mono">{roughness.toFixed(1)}</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0"
+                        max="1"
+                        step="0.1"
+                        value={roughness}
+                        onChange={(e) => setRoughness(parseFloat(e.target.value))}
+                        className="w-full accent-purple-500"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
