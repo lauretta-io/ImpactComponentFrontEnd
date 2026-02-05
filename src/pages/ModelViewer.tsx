@@ -59,12 +59,18 @@ export default function ModelViewer() {
     directionalLight2.position.set(-5, -5, -5);
     scene.add(directionalLight2);
 
+    const gridHelper = new THREE.GridHelper(10, 10, 0x444444, 0x222222);
+    scene.add(gridHelper);
+    console.log('Grid helper added to scene');
+
     const animate = () => {
       requestAnimationFrame(animate);
       controls.update();
       renderer.render(scene, camera);
     };
     animate();
+
+    console.log('Three.js scene initialized');
 
     const handleResize = () => {
       if (!cameraRef.current || !rendererRef.current) return;
@@ -169,10 +175,19 @@ export default function ModelViewer() {
           const scale = 4 / maxDim;
           model.scale.multiplyScalar(scale);
 
+          console.log('glTF model details:', {
+            boundingBox: box,
+            size: size,
+            scale: scale,
+            position: model.position,
+            childCount: model.children.length
+          });
+
           sceneRef.current!.add(model);
           modelRef.current = model as any;
           setHasModel(true);
           setIsLoading(false);
+          console.log('glTF model added to scene, total children:', sceneRef.current!.children.length);
         },
         (progress) => {
           console.log('Loading progress:', (progress.loaded / progress.total) * 100, '%');
@@ -196,9 +211,18 @@ export default function ModelViewer() {
             side: THREE.DoubleSide,
           });
           const mesh = new THREE.Mesh(geometry, material);
+          mesh.castShadow = true;
+          mesh.receiveShadow = true;
 
           geometry.computeBoundingBox();
           const bbox = geometry.boundingBox!;
+          if (!bbox) {
+            console.error('No bounding box computed for PLY geometry');
+            setError('Invalid PLY geometry');
+            setIsLoading(false);
+            return;
+          }
+
           const center = new THREE.Vector3();
           bbox.getCenter(center);
           mesh.position.sub(center);
@@ -209,11 +233,19 @@ export default function ModelViewer() {
           const scale = 4 / maxDim;
           mesh.scale.multiplyScalar(scale);
 
+          console.log('PLY mesh details:', {
+            vertices: geometry.attributes.position?.count,
+            boundingBox: bbox,
+            size: size,
+            scale: scale,
+            position: mesh.position
+          });
+
           sceneRef.current!.add(mesh);
           modelRef.current = mesh;
           setHasModel(true);
           setIsLoading(false);
-          console.log('PLY model added to scene');
+          console.log('PLY model added to scene, total children:', sceneRef.current!.children.length);
         },
         (progress) => {
           console.log('PLY loading progress:', (progress.loaded / progress.total) * 100, '%');
@@ -228,25 +260,37 @@ export default function ModelViewer() {
   };
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    console.log('handleFileUpload triggered');
     const files = event.target.files;
-    if (!files || files.length === 0) return;
+    console.log('Files:', files);
+
+    if (!files || files.length === 0) {
+      console.log('No files selected');
+      return;
+    }
 
     const validExtensions = ['.ply', '.gltf', '.glb'];
     const fileArray = Array.from(files);
+    console.log('File array:', fileArray.map(f => f.name));
 
     const validFile = fileArray.find((file) => {
       const ext = '.' + file.name.toLowerCase().split('.').pop();
-      return validExtensions.includes(ext);
+      const isValid = validExtensions.includes(ext);
+      console.log(`Checking ${file.name}, extension: ${ext}, valid: ${isValid}`);
+      return isValid;
     });
 
     if (validFile) {
-      console.log('Loading file:', validFile.name);
+      console.log('Valid file found:', validFile.name, 'Size:', validFile.size, 'bytes');
       const url = URL.createObjectURL(validFile);
+      console.log('Blob URL created:', url);
       const fileExtension = validFile.name.toLowerCase().split('.').pop() || '';
+      console.log('File extension:', fileExtension);
       loadModel(url, fileExtension);
     } else {
-      setError('No valid .ply or .gltf files found');
-      console.error('No valid files found in:', fileArray.map(f => f.name));
+      const errorMsg = 'No valid .ply or .gltf files found';
+      setError(errorMsg);
+      console.error(errorMsg, 'Files:', fileArray.map(f => f.name));
     }
   };
 
