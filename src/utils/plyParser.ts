@@ -1,7 +1,9 @@
 import * as THREE from 'three';
 
+type PLYFormat = 'ascii' | 'binary_little_endian' | 'binary_big_endian';
+
 interface PLYHeader {
-  format: string;
+  format: PLYFormat;
   vertexCount: number;
   faceCount: number;
   headerLength: number;
@@ -29,14 +31,17 @@ export function parsePLYWithExpandedBuffer(arrayBuffer: ArrayBuffer): THREE.Buff
   console.log('PLY Header:', header);
 
   // Parse data based on format
-  if (header.format.includes('ascii')) {
-    return parsePLYAscii(expandedView, header);
-  } else if (header.format.includes('binary_little_endian')) {
-    return parsePLYBinaryLittleEndian(expandedBuffer, header);
-  } else if (header.format.includes('binary_big_endian')) {
-    return parsePLYBinaryBigEndian(expandedBuffer, header);
-  } else {
-    throw new Error(`Unsupported PLY format: ${header.format}`);
+  console.log(`Detected PLY format: ${header.format}`);
+
+  switch (header.format) {
+    case 'ascii':
+      return parsePLYAscii(expandedView, header);
+    case 'binary_little_endian':
+      return parsePLYBinaryLittleEndian(expandedBuffer, header);
+    case 'binary_big_endian':
+      return parsePLYBinaryBigEndian(expandedBuffer, header);
+    default:
+      throw new Error(`Unsupported PLY format: ${header.format}`);
   }
 }
 
@@ -67,7 +72,7 @@ function parsePLYHeader(uint8Array: Uint8Array): PLYHeader {
 
   const lines = headerText.split('\n').map(line => line.trim());
 
-  let format = '';
+  let format: PLYFormat | null = null;
   let vertexCount = 0;
   let faceCount = 0;
   const properties: { name: string; type: string }[] = [];
@@ -76,7 +81,18 @@ function parsePLYHeader(uint8Array: Uint8Array): PLYHeader {
 
   for (const line of lines) {
     if (line.startsWith('format ')) {
-      format = line.substring(7).split(' ')[0];
+      const formatString = line.substring(7).split(' ')[0].toLowerCase();
+
+      // Validate and normalize format string
+      if (formatString === 'ascii') {
+        format = 'ascii';
+      } else if (formatString === 'binary_little_endian') {
+        format = 'binary_little_endian';
+      } else if (formatString === 'binary_big_endian') {
+        format = 'binary_big_endian';
+      } else {
+        throw new Error(`Unknown PLY format: ${formatString}`);
+      }
     } else if (line.startsWith('element vertex ')) {
       vertexCount = parseInt(line.substring(15));
       inVertexElement = true;
@@ -92,6 +108,10 @@ function parsePLYHeader(uint8Array: Uint8Array): PLYHeader {
     }
   }
 
+  if (!format) {
+    throw new Error('PLY format not specified in header');
+  }
+
   return { format, vertexCount, faceCount, headerLength, properties };
 }
 
@@ -104,19 +124,48 @@ function parsePLYAscii(uint8Array: Uint8Array, header: PLYHeader): THREE.BufferG
   const colors: number[] = [];
   const indices: number[] = [];
 
+  // Validate coordinate properties exist
+  const hasX = header.properties.some(p => p.name === 'x');
+  const hasY = header.properties.some(p => p.name === 'y');
+  const hasZ = header.properties.some(p => p.name === 'z');
+
+  if (!hasX || !hasY || !hasZ) {
+    throw new Error('PLY file missing x, y, or z coordinates');
+  }
+
+  // Find property indices
+  const xIndex = header.properties.findIndex(p => p.name === 'x');
+  const yIndex = header.properties.findIndex(p => p.name === 'y');
+  const zIndex = header.properties.findIndex(p => p.name === 'z');
+  const redIndex = header.properties.findIndex(p => p.name === 'red');
+  const greenIndex = header.properties.findIndex(p => p.name === 'green');
+  const blueIndex = header.properties.findIndex(p => p.name === 'blue');
+
+  console.log('Property indices - x:', xIndex, 'y:', yIndex, 'z:', zIndex);
+
   // Parse vertices
   for (let i = 0; i < header.vertexCount && i < lines.length; i++) {
     const values = lines[i].trim().split(/\s+/).map(Number);
 
     if (values.length >= 3) {
-      positions.push(values[0], values[1], values[2]);
+      const x = values[xIndex];
+      const y = values[yIndex];
+      const z = values[zIndex];
 
-      // Check for colors (typically RGB or RGBA after XYZ)
-      if (values.length >= 6) {
-        colors.push(values[3] / 255, values[4] / 255, values[5] / 255);
+      positions.push(x, y, z);
+
+      // Check for colors
+      if (redIndex >= 0 && greenIndex >= 0 && blueIndex >= 0 &&
+          values.length > Math.max(redIndex, greenIndex, blueIndex)) {
+        const r = values[redIndex];
+        const g = values[greenIndex];
+        const b = values[blueIndex];
+        colors.push(r / 255, g / 255, b / 255);
       }
     }
   }
+
+  console.log(`ASCII: Parsed ${positions.length / 3} vertices with ${colors.length / 3} colors`);
 
   // Parse faces
   if (header.faceCount > 0) {
@@ -150,6 +199,18 @@ function parsePLYBinary(arrayBuffer: ArrayBuffer, header: PLYHeader, littleEndia
   const positions: number[] = [];
   const colors: number[] = [];
   const indices: number[] = [];
+
+  // Validate coordinate properties exist
+  const hasX = header.properties.some(p => p.name === 'x');
+  const hasY = header.properties.some(p => p.name === 'y');
+  const hasZ = header.properties.some(p => p.name === 'z');
+
+  if (!hasX || !hasY || !hasZ) {
+    throw new Error('PLY file missing x, y, or z coordinates');
+  }
+
+  console.log(`Parsing binary PLY (${littleEndian ? 'Little Endian' : 'Big Endian'})`);
+  console.log('Properties:', header.properties.map(p => `${p.name}(${p.type})`).join(', '));
 
   let offset = header.headerLength;
 
@@ -292,15 +353,41 @@ function createGeometry(positions: number[], colors: number[], indices: number[]
 
   if (positions.length > 0) {
     geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+
+    // Log coordinate ranges for debugging
+    let minX = Infinity, maxX = -Infinity;
+    let minY = Infinity, maxY = -Infinity;
+    let minZ = Infinity, maxZ = -Infinity;
+
+    for (let i = 0; i < positions.length; i += 3) {
+      const x = positions[i];
+      const y = positions[i + 1];
+      const z = positions[i + 2];
+
+      minX = Math.min(minX, x); maxX = Math.max(maxX, x);
+      minY = Math.min(minY, y); maxY = Math.max(maxY, y);
+      minZ = Math.min(minZ, z); maxZ = Math.max(maxZ, z);
+    }
+
+    console.log('Coordinate ranges:');
+    console.log(`  X: ${minX.toFixed(3)} to ${maxX.toFixed(3)} (range: ${(maxX - minX).toFixed(3)})`);
+    console.log(`  Y: ${minY.toFixed(3)} to ${maxY.toFixed(3)} (range: ${(maxY - minY).toFixed(3)})`);
+    console.log(`  Z: ${minZ.toFixed(3)} to ${maxZ.toFixed(3)} (range: ${(maxZ - minZ).toFixed(3)})`);
+    console.log(`Total vertices: ${positions.length / 3}`);
   }
 
   if (colors.length > 0) {
     geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+    console.log(`Total colors: ${colors.length / 3}`);
   }
 
   if (indices.length > 0) {
     geometry.setIndex(indices);
+    console.log(`Total faces: ${indices.length / 3}`);
   }
+
+  geometry.computeBoundingBox();
+  geometry.computeBoundingSphere();
 
   return geometry;
 }
