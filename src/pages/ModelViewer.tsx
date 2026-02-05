@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { PLYLoader } from 'three/examples/jsm/loaders/PLYLoader.js';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { Link } from 'react-router-dom';
-import { Camera, ZoomIn, ZoomOut, Home } from 'lucide-react';
+import { Camera, ZoomIn, ZoomOut, Home, Upload } from 'lucide-react';
 
 export default function ModelViewer() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -122,42 +123,97 @@ export default function ModelViewer() {
       }
     }
 
-    const loader = new PLYLoader();
-    loader.load(
-      url,
-      (geometry) => {
-        geometry.computeVertexNormals();
-        const material = new THREE.MeshStandardMaterial({
-          color: 0x00a8ff,
-          flatShading: false,
-          side: THREE.DoubleSide,
-        });
-        const mesh = new THREE.Mesh(geometry, material);
+    const fileExtension = url.toLowerCase().split('.').pop();
+    const isGLTF = fileExtension === 'gltf' || fileExtension === 'glb';
 
-        geometry.computeBoundingBox();
-        const bbox = geometry.boundingBox!;
-        const center = new THREE.Vector3();
-        bbox.getCenter(center);
-        mesh.position.sub(center);
+    if (isGLTF) {
+      const loader = new GLTFLoader();
+      loader.load(
+        url,
+        (gltf) => {
+          const model = gltf.scene;
 
-        const size = new THREE.Vector3();
-        bbox.getSize(size);
-        const maxDim = Math.max(size.x, size.y, size.z);
-        const scale = 4 / maxDim;
-        mesh.scale.multiplyScalar(scale);
+          const box = new THREE.Box3().setFromObject(model);
+          const center = new THREE.Vector3();
+          box.getCenter(center);
+          model.position.sub(center);
 
-        sceneRef.current!.add(mesh);
-        modelRef.current = mesh;
-        setHasModel(true);
-        setIsLoading(false);
-      },
-      undefined,
-      (error) => {
-        setError('Failed to load PLY file');
-        setIsLoading(false);
-        console.error(error);
-      }
-    );
+          const size = new THREE.Vector3();
+          box.getSize(size);
+          const maxDim = Math.max(size.x, size.y, size.z);
+          const scale = 4 / maxDim;
+          model.scale.multiplyScalar(scale);
+
+          sceneRef.current!.add(model);
+          modelRef.current = model as any;
+          setHasModel(true);
+          setIsLoading(false);
+        },
+        undefined,
+        (error) => {
+          setError('Failed to load glTF file');
+          setIsLoading(false);
+          console.error(error);
+        }
+      );
+    } else {
+      const loader = new PLYLoader();
+      loader.load(
+        url,
+        (geometry) => {
+          geometry.computeVertexNormals();
+          const material = new THREE.MeshStandardMaterial({
+            color: 0x00a8ff,
+            flatShading: false,
+            side: THREE.DoubleSide,
+          });
+          const mesh = new THREE.Mesh(geometry, material);
+
+          geometry.computeBoundingBox();
+          const bbox = geometry.boundingBox!;
+          const center = new THREE.Vector3();
+          bbox.getCenter(center);
+          mesh.position.sub(center);
+
+          const size = new THREE.Vector3();
+          bbox.getSize(size);
+          const maxDim = Math.max(size.x, size.y, size.z);
+          const scale = 4 / maxDim;
+          mesh.scale.multiplyScalar(scale);
+
+          sceneRef.current!.add(mesh);
+          modelRef.current = mesh;
+          setHasModel(true);
+          setIsLoading(false);
+        },
+        undefined,
+        (error) => {
+          setError('Failed to load PLY file');
+          setIsLoading(false);
+          console.error(error);
+        }
+      );
+    }
+  };
+
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+
+    const validExtensions = ['.ply', '.gltf', '.glb'];
+    const fileArray = Array.from(files);
+
+    const validFile = fileArray.find((file) => {
+      const ext = '.' + file.name.toLowerCase().split('.').pop();
+      return validExtensions.includes(ext);
+    });
+
+    if (validFile) {
+      const url = URL.createObjectURL(validFile);
+      loadModel(url);
+    } else {
+      setError('No valid .ply or .gltf files found');
+    }
   };
 
   const resetCamera = () => {
@@ -187,9 +243,9 @@ export default function ModelViewer() {
       {!hasModel && !isLoading && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
           <div className="text-center">
-            <div className="text-gray-400 text-2xl mb-4">Waiting for image...</div>
+            <div className="text-gray-400 text-2xl mb-4">No Model Loaded</div>
             <div className="text-gray-500 text-sm">
-              No 3D model available yet. Capture images from the Camera page.
+              Capture images from the Camera page or upload .ply/.gltf files
             </div>
           </div>
         </div>
@@ -218,6 +274,17 @@ export default function ModelViewer() {
           <Camera size={20} />
           Switch to Dashboard View
         </Link>
+        <label className="bg-blue-600/80 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors backdrop-blur-sm cursor-pointer">
+          <Upload size={20} />
+          Load Model Files
+          <input
+            type="file"
+            accept=".ply,.gltf,.glb"
+            multiple
+            onChange={handleFileUpload}
+            className="hidden"
+          />
+        </label>
       </div>
 
       {hasModel && (
