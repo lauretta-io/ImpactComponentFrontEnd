@@ -226,48 +226,38 @@ export default function ModelViewer() {
         }
       );
     } else {
-      // Validate and load PLY file
-      fetch(url)
-        .then(response => {
-          if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+      // Load PLY file using URL-based loader
+      const loader = new PLYLoader();
+
+      loader.load(
+        url,
+        (geometry) => {
+          console.log('PLY loaded successfully, vertices:', geometry.attributes.position?.count);
+
+          if (!geometry.attributes.position || geometry.attributes.position.count === 0) {
+            setError('PLY file contains no vertices');
+            setIsLoading(false);
+            return;
           }
-          return response.arrayBuffer();
-        })
-        .then(buffer => {
-          console.log('Loading PLY file, size:', buffer.byteLength, 'bytes');
 
-          const loader = new PLYLoader();
+          geometry.computeVertexNormals();
 
-          try {
-            const geometry = loader.parse(buffer);
-            console.log('PLY parsed successfully, vertices:', geometry.attributes.position?.count);
+          const material = new THREE.MeshStandardMaterial({
+            color: 0x00a8ff,
+            flatShading: false,
+            side: THREE.DoubleSide,
+            metalness: 0.3,
+            roughness: 0.4,
+          });
 
-            if (!geometry.attributes.position || geometry.attributes.position.count === 0) {
-              throw new Error('PLY file contains no vertices');
-            }
+          const mesh = new THREE.Mesh(geometry, material);
+          mesh.castShadow = true;
+          mesh.receiveShadow = true;
 
-            geometry.computeVertexNormals();
+          geometry.computeBoundingBox();
+          const bbox = geometry.boundingBox;
 
-            const material = new THREE.MeshStandardMaterial({
-              color: 0x00a8ff,
-              flatShading: false,
-              side: THREE.DoubleSide,
-              metalness: 0.3,
-              roughness: 0.4,
-            });
-
-            const mesh = new THREE.Mesh(geometry, material);
-            mesh.castShadow = true;
-            mesh.receiveShadow = true;
-
-            geometry.computeBoundingBox();
-            const bbox = geometry.boundingBox;
-
-            if (!bbox) {
-              throw new Error('Could not compute bounding box');
-            }
-
+          if (bbox) {
             const center = new THREE.Vector3();
             bbox.getCenter(center);
             mesh.position.sub(center);
@@ -276,52 +266,47 @@ export default function ModelViewer() {
             bbox.getSize(size);
             const maxDim = Math.max(size.x, size.y, size.z);
 
-            if (maxDim === 0 || !isFinite(maxDim)) {
-              throw new Error('Invalid model dimensions');
+            if (maxDim > 0 && isFinite(maxDim)) {
+              const scale = 4 / maxDim;
+              mesh.scale.multiplyScalar(scale);
             }
-
-            const scale = 4 / maxDim;
-            mesh.scale.multiplyScalar(scale);
 
             console.log('PLY mesh details:', {
               vertices: geometry.attributes.position?.count,
-              format: format,
               boundingBox: bbox,
               size: size,
-              scale: scale,
               center: center
             });
-
-            if (modelRef.current) {
-              sceneRef.current!.remove(modelRef.current);
-            }
-
-            sceneRef.current!.add(mesh);
-            modelRef.current = mesh;
-            setHasModel(true);
-            setIsLoading(false);
-            setError(null);
-            console.log('PLY model added to scene successfully');
-
-            // Adjust camera to view the model
-            if (cameraRef.current && controlsRef.current) {
-              controlsRef.current.target.set(0, 0, 0);
-              cameraRef.current.position.set(0, 2, 6);
-              controlsRef.current.update();
-            }
-          } catch (err) {
-            console.error('PLY parsing error:', err);
-            const errorMsg = err instanceof Error ? err.message : 'Unknown error';
-            setError(`PLY parsing failed: ${errorMsg}. The file may be corrupted or use an unsupported PLY variant.`);
-            setIsLoading(false);
           }
-        })
-        .catch(error => {
+
+          if (modelRef.current) {
+            sceneRef.current!.remove(modelRef.current);
+          }
+
+          sceneRef.current!.add(mesh);
+          modelRef.current = mesh;
+          setHasModel(true);
+          setIsLoading(false);
+          setError(null);
+          console.log('PLY model added to scene successfully');
+
+          // Adjust camera to view the model
+          if (cameraRef.current && controlsRef.current) {
+            controlsRef.current.target.set(0, 0, 0);
+            cameraRef.current.position.set(0, 2, 6);
+            controlsRef.current.update();
+          }
+        },
+        (progress) => {
+          console.log('Loading progress:', (progress.loaded / progress.total * 100).toFixed(2) + '%');
+        },
+        (error) => {
           console.error('PLY load error:', error);
           const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-          setError(`Failed to load PLY file: ${errorMsg}`);
+          setError(`Failed to load PLY file: ${errorMsg}. Try using a different PLY file or check the console for details.`);
           setIsLoading(false);
-        });
+        }
+      );
     }
   };
 
