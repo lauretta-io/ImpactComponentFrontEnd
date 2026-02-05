@@ -226,19 +226,64 @@ export default function ModelViewer() {
         }
       );
     } else {
-      // First, let's inspect the file to see if it's valid PLY
+      // Validate and load PLY file
       fetch(url)
-        .then(response => response.arrayBuffer())
+        .then(response => {
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+          return response.arrayBuffer();
+        })
         .then(buffer => {
+          // Validate PLY header
+          const headerView = new Uint8Array(buffer, 0, Math.min(1000, buffer.byteLength));
+          const headerText = new TextDecoder('utf-8').decode(headerView);
+
+          console.log('PLY file header (first 500 chars):', headerText.substring(0, 500));
+
+          if (!headerText.startsWith('ply')) {
+            throw new Error('Invalid PLY file: Missing "ply" magic header');
+          }
+
+          // Check for format line
+          const formatMatch = headerText.match(/format\s+(ascii|binary_little_endian|binary_big_endian)\s+[\d.]+/);
+          if (!formatMatch) {
+            throw new Error('Invalid PLY file: Missing format specification');
+          }
+
+          const format = formatMatch[1];
+          console.log('PLY format detected:', format);
+
+          // Check for vertex count
+          const vertexMatch = headerText.match(/element\s+vertex\s+(\d+)/);
+          if (!vertexMatch) {
+            throw new Error('Invalid PLY file: No vertex element defined');
+          }
+
+          const vertexCount = parseInt(vertexMatch[1], 10);
+          console.log('Expected vertex count:', vertexCount);
+
+          if (vertexCount === 0) {
+            throw new Error('PLY file contains 0 vertices');
+          }
+
+          // Check header ends properly
+          if (!headerText.includes('end_header')) {
+            throw new Error('Invalid PLY file: Missing end_header marker');
+          }
+
           const loader = new PLYLoader();
 
-          // Try to parse the PLY file
           try {
             const geometry = loader.parse(buffer);
-            console.log('PLY parsed successfully, vertices:', geometry.attributes.position?.count);
+            console.log('PLY parsed successfully, actual vertices:', geometry.attributes.position?.count);
 
             if (!geometry.attributes.position || geometry.attributes.position.count === 0) {
-              throw new Error('PLY file contains no vertices');
+              throw new Error('PLY parsing resulted in no vertices');
+            }
+
+            if (geometry.attributes.position.count !== vertexCount) {
+              console.warn(`Vertex count mismatch: expected ${vertexCount}, got ${geometry.attributes.position.count}`);
             }
 
             geometry.computeVertexNormals();
@@ -279,6 +324,7 @@ export default function ModelViewer() {
 
             console.log('PLY mesh details:', {
               vertices: geometry.attributes.position?.count,
+              format: format,
               boundingBox: bbox,
               size: size,
               scale: scale,
@@ -304,13 +350,15 @@ export default function ModelViewer() {
             }
           } catch (err) {
             console.error('PLY parsing error:', err);
-            setError(`Failed to parse PLY file: ${err instanceof Error ? err.message : 'Unknown error'}`);
+            const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+            setError(`PLY parsing failed: ${errorMsg}. The file may be corrupted or use an unsupported PLY variant.`);
             setIsLoading(false);
           }
         })
         .catch(error => {
-          console.error('PLY fetch error:', error);
-          setError('Failed to load PLY file');
+          console.error('PLY load error:', error);
+          const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+          setError(`Failed to load PLY file: ${errorMsg}`);
           setIsLoading(false);
         });
     }
