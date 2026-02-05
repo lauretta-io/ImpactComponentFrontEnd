@@ -5,6 +5,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { Link } from 'react-router-dom';
 import { Camera, ZoomIn, ZoomOut, Home, Upload } from 'lucide-react';
+import { parsePLYWithExpandedBuffer } from '../utils/plyParser';
 
 export default function ModelViewer() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -226,87 +227,99 @@ export default function ModelViewer() {
         }
       );
     } else {
-      // Load PLY file using URL-based loader
-      const loader = new PLYLoader();
-
-      loader.load(
-        url,
-        (geometry) => {
-          console.log('PLY loaded successfully, vertices:', geometry.attributes.position?.count);
-
-          if (!geometry.attributes.position || geometry.attributes.position.count === 0) {
-            setError('PLY file contains no vertices');
-            setIsLoading(false);
-            return;
+      // Load PLY file with custom parser that handles buffer expansion
+      fetch(url)
+        .then(response => {
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
           }
+          return response.arrayBuffer();
+        })
+        .then(buffer => {
+          console.log('PLY file loaded, size:', buffer.byteLength, 'bytes');
 
-          geometry.computeVertexNormals();
+          try {
+            // Use custom parser with expanded buffer to prevent offset errors
+            const geometry = parsePLYWithExpandedBuffer(buffer);
+            console.log('PLY parsed successfully, vertices:', geometry.attributes.position?.count);
 
-          const material = new THREE.MeshStandardMaterial({
-            color: 0x00a8ff,
-            flatShading: false,
-            side: THREE.DoubleSide,
-            metalness: 0.3,
-            roughness: 0.4,
-          });
-
-          const mesh = new THREE.Mesh(geometry, material);
-          mesh.castShadow = true;
-          mesh.receiveShadow = true;
-
-          geometry.computeBoundingBox();
-          const bbox = geometry.boundingBox;
-
-          if (bbox) {
-            const center = new THREE.Vector3();
-            bbox.getCenter(center);
-            mesh.position.sub(center);
-
-            const size = new THREE.Vector3();
-            bbox.getSize(size);
-            const maxDim = Math.max(size.x, size.y, size.z);
-
-            if (maxDim > 0 && isFinite(maxDim)) {
-              const scale = 4 / maxDim;
-              mesh.scale.multiplyScalar(scale);
+            if (!geometry.attributes.position || geometry.attributes.position.count === 0) {
+              throw new Error('PLY file contains no vertices');
             }
 
-            console.log('PLY mesh details:', {
-              vertices: geometry.attributes.position?.count,
-              boundingBox: bbox,
-              size: size,
-              center: center
+            geometry.computeVertexNormals();
+
+            // Use vertex colors if available, otherwise use solid color
+            const hasColors = geometry.attributes.color !== undefined;
+            const material = new THREE.MeshStandardMaterial({
+              color: hasColors ? 0xffffff : 0x00a8ff,
+              flatShading: false,
+              side: THREE.DoubleSide,
+              metalness: 0.3,
+              roughness: 0.4,
+              vertexColors: hasColors,
             });
-          }
 
-          if (modelRef.current) {
-            sceneRef.current!.remove(modelRef.current);
-          }
+            const mesh = new THREE.Mesh(geometry, material);
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
 
-          sceneRef.current!.add(mesh);
-          modelRef.current = mesh;
-          setHasModel(true);
-          setIsLoading(false);
-          setError(null);
-          console.log('PLY model added to scene successfully');
+            geometry.computeBoundingBox();
+            const bbox = geometry.boundingBox;
 
-          // Adjust camera to view the model
-          if (cameraRef.current && controlsRef.current) {
-            controlsRef.current.target.set(0, 0, 0);
-            cameraRef.current.position.set(0, 2, 6);
-            controlsRef.current.update();
+            if (bbox) {
+              const center = new THREE.Vector3();
+              bbox.getCenter(center);
+              mesh.position.sub(center);
+
+              const size = new THREE.Vector3();
+              bbox.getSize(size);
+              const maxDim = Math.max(size.x, size.y, size.z);
+
+              if (maxDim > 0 && isFinite(maxDim)) {
+                const scale = 4 / maxDim;
+                mesh.scale.multiplyScalar(scale);
+              }
+
+              console.log('PLY mesh details:', {
+                vertices: geometry.attributes.position?.count,
+                hasColors: hasColors,
+                boundingBox: bbox,
+                size: size,
+                center: center
+              });
+            }
+
+            if (modelRef.current) {
+              sceneRef.current!.remove(modelRef.current);
+            }
+
+            sceneRef.current!.add(mesh);
+            modelRef.current = mesh;
+            setHasModel(true);
+            setIsLoading(false);
+            setError(null);
+            console.log('PLY model added to scene successfully');
+
+            // Adjust camera to view the model
+            if (cameraRef.current && controlsRef.current) {
+              controlsRef.current.target.set(0, 0, 0);
+              cameraRef.current.position.set(0, 2, 6);
+              controlsRef.current.update();
+            }
+          } catch (err) {
+            console.error('PLY parsing error:', err);
+            const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+            setError(`PLY parsing failed: ${errorMsg}`);
+            setIsLoading(false);
           }
-        },
-        (progress) => {
-          console.log('Loading progress:', (progress.loaded / progress.total * 100).toFixed(2) + '%');
-        },
-        (error) => {
+        })
+        .catch(error => {
           console.error('PLY load error:', error);
           const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-          setError(`Failed to load PLY file: ${errorMsg}. Try using a different PLY file or check the console for details.`);
+          setError(`Failed to load PLY file: ${errorMsg}`);
           setIsLoading(false);
-        }
-      );
+        });
     }
   };
 
