@@ -152,45 +152,72 @@ export default function ModelViewer() {
       loader.load(
         url,
         (gltf) => {
-          const model = gltf.scene;
+          try {
+            const model = gltf.scene;
 
-          model.traverse((child: any) => {
-            if (child.isMesh) {
-              child.castShadow = true;
-              child.receiveShadow = true;
-              if (child.material) {
-                child.material.needsUpdate = true;
-              }
+            if (!model || model.children.length === 0) {
+              throw new Error('glTF file contains no geometry');
             }
-          });
 
-          const box = new THREE.Box3().setFromObject(model);
-          const center = new THREE.Vector3();
-          box.getCenter(center);
-          model.position.sub(center);
+            model.traverse((child: any) => {
+              if (child.isMesh) {
+                child.castShadow = true;
+                child.receiveShadow = true;
+                if (child.material) {
+                  child.material.needsUpdate = true;
+                }
+              }
+            });
 
-          const size = new THREE.Vector3();
-          box.getSize(size);
-          const maxDim = Math.max(size.x, size.y, size.z);
-          const scale = 4 / maxDim;
-          model.scale.multiplyScalar(scale);
+            const box = new THREE.Box3().setFromObject(model);
+            const center = new THREE.Vector3();
+            box.getCenter(center);
+            model.position.sub(center);
 
-          console.log('glTF model details:', {
-            boundingBox: box,
-            size: size,
-            scale: scale,
-            position: model.position,
-            childCount: model.children.length
-          });
+            const size = new THREE.Vector3();
+            box.getSize(size);
+            const maxDim = Math.max(size.x, size.y, size.z);
 
-          sceneRef.current!.add(model);
-          modelRef.current = model as any;
-          setHasModel(true);
-          setIsLoading(false);
-          console.log('glTF model added to scene, total children:', sceneRef.current!.children.length);
+            if (maxDim === 0 || !isFinite(maxDim)) {
+              throw new Error('Invalid model dimensions');
+            }
+
+            const scale = 4 / maxDim;
+            model.scale.multiplyScalar(scale);
+
+            console.log('glTF model details:', {
+              boundingBox: box,
+              size: size,
+              scale: scale,
+              center: center,
+              childCount: model.children.length
+            });
+
+            if (modelRef.current) {
+              sceneRef.current!.remove(modelRef.current);
+            }
+
+            sceneRef.current!.add(model);
+            modelRef.current = model as any;
+            setHasModel(true);
+            setIsLoading(false);
+            setError(null);
+            console.log('glTF model added to scene successfully');
+
+            // Adjust camera to view the model
+            if (cameraRef.current && controlsRef.current) {
+              controlsRef.current.target.set(0, 0, 0);
+              cameraRef.current.position.set(0, 2, 6);
+              controlsRef.current.update();
+            }
+          } catch (err) {
+            console.error('glTF processing error:', err);
+            setError(`Failed to process glTF: ${err instanceof Error ? err.message : 'Unknown error'}`);
+            setIsLoading(false);
+          }
         },
         (progress) => {
-          console.log('Loading progress:', (progress.loaded / progress.total) * 100, '%');
+          console.log('glTF loading progress:', (progress.loaded / progress.total) * 100, '%');
         },
         (error) => {
           setError('Failed to load glTF file');
@@ -199,63 +226,93 @@ export default function ModelViewer() {
         }
       );
     } else {
-      const loader = new PLYLoader();
-      loader.load(
-        url,
-        (geometry) => {
-          console.log('PLY loaded, vertices:', geometry.attributes.position?.count);
-          geometry.computeVertexNormals();
-          const material = new THREE.MeshStandardMaterial({
-            color: 0x00a8ff,
-            flatShading: false,
-            side: THREE.DoubleSide,
-          });
-          const mesh = new THREE.Mesh(geometry, material);
-          mesh.castShadow = true;
-          mesh.receiveShadow = true;
+      // First, let's inspect the file to see if it's valid PLY
+      fetch(url)
+        .then(response => response.arrayBuffer())
+        .then(buffer => {
+          const loader = new PLYLoader();
 
-          geometry.computeBoundingBox();
-          const bbox = geometry.boundingBox!;
-          if (!bbox) {
-            console.error('No bounding box computed for PLY geometry');
-            setError('Invalid PLY geometry');
+          // Try to parse the PLY file
+          try {
+            const geometry = loader.parse(buffer);
+            console.log('PLY parsed successfully, vertices:', geometry.attributes.position?.count);
+
+            if (!geometry.attributes.position || geometry.attributes.position.count === 0) {
+              throw new Error('PLY file contains no vertices');
+            }
+
+            geometry.computeVertexNormals();
+
+            const material = new THREE.MeshStandardMaterial({
+              color: 0x00a8ff,
+              flatShading: false,
+              side: THREE.DoubleSide,
+              metalness: 0.3,
+              roughness: 0.4,
+            });
+
+            const mesh = new THREE.Mesh(geometry, material);
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+
+            geometry.computeBoundingBox();
+            const bbox = geometry.boundingBox;
+
+            if (!bbox) {
+              throw new Error('Could not compute bounding box');
+            }
+
+            const center = new THREE.Vector3();
+            bbox.getCenter(center);
+            mesh.position.sub(center);
+
+            const size = new THREE.Vector3();
+            bbox.getSize(size);
+            const maxDim = Math.max(size.x, size.y, size.z);
+
+            if (maxDim === 0 || !isFinite(maxDim)) {
+              throw new Error('Invalid model dimensions');
+            }
+
+            const scale = 4 / maxDim;
+            mesh.scale.multiplyScalar(scale);
+
+            console.log('PLY mesh details:', {
+              vertices: geometry.attributes.position?.count,
+              boundingBox: bbox,
+              size: size,
+              scale: scale,
+              center: center
+            });
+
+            if (modelRef.current) {
+              sceneRef.current!.remove(modelRef.current);
+            }
+
+            sceneRef.current!.add(mesh);
+            modelRef.current = mesh;
+            setHasModel(true);
             setIsLoading(false);
-            return;
+            setError(null);
+            console.log('PLY model added to scene successfully');
+
+            // Adjust camera to view the model
+            if (cameraRef.current && controlsRef.current) {
+              controlsRef.current.target.set(0, 0, 0);
+              cameraRef.current.position.set(0, 2, 6);
+              controlsRef.current.update();
+            }
+          } catch (err) {
+            console.error('PLY parsing error:', err);
+            setError(`Failed to parse PLY file: ${err instanceof Error ? err.message : 'Unknown error'}`);
+            setIsLoading(false);
           }
-
-          const center = new THREE.Vector3();
-          bbox.getCenter(center);
-          mesh.position.sub(center);
-
-          const size = new THREE.Vector3();
-          bbox.getSize(size);
-          const maxDim = Math.max(size.x, size.y, size.z);
-          const scale = 4 / maxDim;
-          mesh.scale.multiplyScalar(scale);
-
-          console.log('PLY mesh details:', {
-            vertices: geometry.attributes.position?.count,
-            boundingBox: bbox,
-            size: size,
-            scale: scale,
-            position: mesh.position
-          });
-
-          sceneRef.current!.add(mesh);
-          modelRef.current = mesh;
-          setHasModel(true);
-          setIsLoading(false);
-          console.log('PLY model added to scene, total children:', sceneRef.current!.children.length);
-        },
-        (progress) => {
-          console.log('PLY loading progress:', (progress.loaded / progress.total) * 100, '%');
-        },
-        (error) => {
+        })
+        .catch(error => {
+          console.error('PLY fetch error:', error);
           setError('Failed to load PLY file');
           setIsLoading(false);
-          console.error('PLY loading error:', error);
-        }
-      );
+        });
     }
   };
 
