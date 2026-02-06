@@ -206,11 +206,10 @@ export default function CameraCapture() {
       let apiResponse: any = null;
 
       try {
-        const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3005';
-        console.log('Sending images to API...');
+        console.log('Sending images to external processing server (localhost:3005)...');
 
         const response = await fetchWithTimeout(
-          `${apiUrl}/images`,
+          'http://localhost:3005/images',
           {
             method: 'POST',
             headers: {

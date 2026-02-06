@@ -1,20 +1,32 @@
 # API Documentation
 
-This project includes a simple Express API server with file-based storage.
+This project uses two separate servers:
 
-## Starting the Server
+1. **Local Server (localhost:3001)** - Handles data storage and management (analysis data, timestamps, models)
+2. **External Processing Server (localhost:3005)** - Handles image processing and analysis
+
+## Architecture Overview
+
+When the "Capture Image" button is pressed:
+1. Both cameras save their images locally
+2. Images are POSTed to the external server at `http://localhost:3005/images`
+3. The system waits up to 10 seconds for the external server response
+4. If after 10 seconds any fields are missing from the response, stock values are used for those specific fields only
+5. The local server (localhost:3001) does NOT process images - it only stores data
+
+## Starting the Local Server
 
 ```bash
 npm run server
 ```
 
-The server runs on port 3005 by default.
+The local server runs on port 3001 by default and provides endpoints for data storage.
 
 ## API Endpoints
 
 ### 1. Update Analysis Data
 
-**Endpoint:** `POST http://localhost:3005/api/update-analysis`
+**Endpoint:** `POST http://localhost:3001/api/update-analysis`
 
 **Description:** Create or update analysis data.
 
@@ -51,7 +63,7 @@ The server runs on port 3005 by default.
 
 ### 2. Record Timestamp
 
-**Endpoint:** `POST http://localhost:3005/api/record-timestamp`
+**Endpoint:** `POST http://localhost:3001/api/record-timestamp`
 
 **Description:** Record processing timestamps for various events.
 
@@ -83,11 +95,11 @@ The server runs on port 3005 by default.
 }
 ```
 
-### 3. Capture and Process Images
+### 3. Capture and Process Images (External Server)
 
 **Endpoint:** `POST http://localhost:3005/images`
 
-**Description:** Called automatically when the "Capture Image" button is pressed. Receives both camera images as base64-encoded JPEG data, processes them, and returns complete analysis results including timings. The processing includes image capture, Gaussian splatting, and AI-powered scene analysis.
+**Description:** This endpoint is on a SEPARATE external processing server (not the local server). Called automatically when the "Capture Image" button is pressed. Receives both camera images as base64-encoded JPEG data, processes them, and returns complete analysis results including timings. The processing includes image capture, Gaussian splatting, and AI-powered scene analysis.
 
 **Request Body:**
 ```json
@@ -130,11 +142,11 @@ The server runs on port 3005 by default.
 - `captured_at` - Timestamp when processing completed
 
 **Behavior:**
-- The endpoint processes images and simulates the complete pipeline
-- Response time matches the total_time to simulate actual processing
-- Frontend waits up to 10 seconds for response
-- **If response is not received within 10 seconds OR any fields are missing, stock values are used for missing data only**
+- The endpoint processes images and returns analysis results
+- Frontend waits up to **10 seconds** for response
+- **If response is not received within 10 seconds OR any fields are missing, stock values are used ONLY for the missing fields**
 - Each missing field is individually replaced with a generated stock value
+- The camera images are always saved locally regardless of the external server response
 
 **Notes:**
 - Images are captured as base64-encoded data URLs from the live camera feeds
@@ -145,7 +157,7 @@ The server runs on port 3005 by default.
 
 ### 4. Refresh 3D Model
 
-**Endpoint:** `POST http://localhost:3005/api/refresh-model`
+**Endpoint:** `POST http://localhost:3001/api/refresh-model`
 
 **Description:** Refresh the 3D model view with a folder name.
 
@@ -174,16 +186,16 @@ The server runs on port 3005 by default.
 ## GET Endpoints (for retrieving data)
 
 ### Get All Analyses
-`GET http://localhost:3005/api/analyses`
+`GET http://localhost:3001/api/analyses`
 
 ### Get All Timestamps
-`GET http://localhost:3005/api/timestamps`
+`GET http://localhost:3001/api/timestamps`
 
 ### Get All Models
-`GET http://localhost:3005/api/models`
+`GET http://localhost:3001/api/models`
 
 ### Health Check
-`GET http://localhost:3005/health`
+`GET http://localhost:3001/health`
 
 ## Data Storage
 
