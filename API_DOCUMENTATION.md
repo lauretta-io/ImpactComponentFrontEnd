@@ -71,6 +71,7 @@ The local server runs on port 3001 by default and provides endpoints for data st
 - `0` - Image Capture
 - `1` - Gaussian Splatting Complete
 - `2` - Image Processed
+- `3` - Total Time
 
 **Request Body:**
 ```json

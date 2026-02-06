@@ -54,9 +54,9 @@ app.post('/api/record-timestamp', async (req, res) => {
       });
     }
 
-    if (![0, 1, 2].includes(id)) {
+    if (![0, 1, 2, 3].includes(id)) {
       return res.status(400).json({
-        error: 'Invalid id. Must be 0 (image capture), 1 (Gaussian Splatting), or 2 (Image Processed)'
+        error: 'Invalid id. Must be 0 (image capture), 1 (Gaussian Splatting), 2 (Image Processed), or 3 (Total Time)'
       });
     }
 
