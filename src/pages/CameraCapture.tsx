@@ -130,14 +130,45 @@ export default function CameraCapture() {
     }
   };
 
+  const captureFrameFromVideo = (videoElement: HTMLVideoElement): string | null => {
+    if (!videoElement || videoElement.readyState !== videoElement.HAVE_ENOUGH_DATA) {
+      return null;
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = videoElement.videoWidth || 640;
+    canvas.height = videoElement.videoHeight || 480;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+
+    ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+
+    return canvas.toDataURL('image/jpeg', 0.8);
+  };
+
   const startCapture = async () => {
     try {
       setIsCapturing(true);
       setCurrentCapture(null);
       setCurrentStep(1);
 
-      const camera1Url = 'https://images.pexels.com/photos/1108099/pexels-photo-1108099.jpeg?auto=compress&cs=tinysrgb&w=800';
-      const camera2Url = 'https://images.pexels.com/photos/2881233/pexels-photo-2881233.jpeg?auto=compress&cs=tinysrgb&w=800';
+      let camera1Image: string | null = null;
+      let camera2Image: string | null = null;
+
+      if (video1Ref.current) {
+        camera1Image = captureFrameFromVideo(video1Ref.current);
+      }
+      if (video2Ref.current) {
+        camera2Image = captureFrameFromVideo(video2Ref.current);
+      }
+
+      if (!camera1Image) {
+        camera1Image = 'https://images.pexels.com/photos/1108099/pexels-photo-1108099.jpeg?auto=compress&cs=tinysrgb&w=800';
+      }
+      if (!camera2Image) {
+        camera2Image = 'https://images.pexels.com/photos/2881233/pexels-photo-2881233.jpeg?auto=compress&cs=tinysrgb&w=800';
+      }
 
       const captureTime = Math.floor(Math.random() * 200) + 150;
       await sleep(captureTime);
@@ -150,13 +181,16 @@ export default function CameraCapture() {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            camera1_url: camera1Url,
-            camera2_url: camera2Url
+            camera1_image: camera1Image,
+            camera2_image: camera2Image
           })
         });
       } catch (error) {
         console.error('Error sending images to API:', error);
       }
+
+      const camera1Url = camera1Image;
+      const camera2Url = camera2Image;
 
       setCurrentCapture({
         camera1_url: camera1Url,

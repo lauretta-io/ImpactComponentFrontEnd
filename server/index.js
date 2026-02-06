@@ -126,23 +126,31 @@ app.get('/api/models', async (req, res) => {
 
 app.post('/api/capture-images', async (req, res) => {
   try {
-    const { camera1_url, camera2_url } = req.body;
+    const { camera1_image, camera2_image } = req.body;
 
-    if (!camera1_url || !camera2_url) {
+    if (!camera1_image || !camera2_image) {
       return res.status(400).json({
-        error: 'Missing required fields: camera1_url, camera2_url'
+        error: 'Missing required fields: camera1_image, camera2_image'
       });
     }
 
     const captureData = {
-      camera1_url,
-      camera2_url,
-      captured_at: new Date().toISOString()
+      camera1_image,
+      camera2_image,
+      captured_at: new Date().toISOString(),
+      image_size_camera1: camera1_image.length,
+      image_size_camera2: camera2_image.length
     };
+
+    console.log(`Images captured: Camera 1 (${captureData.image_size_camera1} bytes), Camera 2 (${captureData.image_size_camera2} bytes)`);
 
     res.json({
       success: true,
-      data: captureData,
+      data: {
+        captured_at: captureData.captured_at,
+        image_size_camera1: captureData.image_size_camera1,
+        image_size_camera2: captureData.image_size_camera2
+      },
       message: 'Images captured successfully'
     });
   } catch (error) {

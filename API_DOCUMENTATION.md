@@ -87,13 +87,13 @@ The server runs on port 3001 by default.
 
 **Endpoint:** `POST http://localhost:3001/api/capture-images`
 
-**Description:** Called automatically when the "Capture Image" button is pressed. Receives both camera images as JSON.
+**Description:** Called automatically when the "Capture Image" button is pressed. Receives both camera images as base64-encoded JPEG data captured from the live video feeds.
 
 **Request Body:**
 ```json
 {
-  "camera1_url": "https://images.pexels.com/photos/1108099/pexels-photo-1108099.jpeg",
-  "camera2_url": "https://images.pexels.com/photos/2881233/pexels-photo-2881233.jpeg"
+  "camera1_image": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAA...",
+  "camera2_image": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAA..."
 }
 ```
 
@@ -102,13 +102,18 @@ The server runs on port 3001 by default.
 {
   "success": true,
   "data": {
-    "camera1_url": "https://images.pexels.com/photos/1108099/pexels-photo-1108099.jpeg",
-    "camera2_url": "https://images.pexels.com/photos/2881233/pexels-photo-2881233.jpeg",
-    "captured_at": "2024-02-06T12:00:00.000Z"
+    "captured_at": "2024-02-06T12:00:00.000Z",
+    "image_size_camera1": 45230,
+    "image_size_camera2": 47891
   },
   "message": "Images captured successfully"
 }
 ```
+
+**Notes:**
+- Images are captured as base64-encoded data URLs from the live camera feeds
+- If camera access is unavailable, fallback stock images are used
+- Image sizes are returned in bytes (base64 string length)
 
 ### 4. Refresh 3D Model
 
