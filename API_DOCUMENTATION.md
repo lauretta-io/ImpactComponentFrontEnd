@@ -83,7 +83,34 @@ The server runs on port 3001 by default.
 }
 ```
 
-### 3. Refresh 3D Model
+### 3. Capture Images
+
+**Endpoint:** `POST http://localhost:3001/api/capture-images`
+
+**Description:** Called automatically when the "Capture Image" button is pressed. Receives both camera images as JSON.
+
+**Request Body:**
+```json
+{
+  "camera1_url": "https://images.pexels.com/photos/1108099/pexels-photo-1108099.jpeg",
+  "camera2_url": "https://images.pexels.com/photos/2881233/pexels-photo-2881233.jpeg"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "camera1_url": "https://images.pexels.com/photos/1108099/pexels-photo-1108099.jpeg",
+    "camera2_url": "https://images.pexels.com/photos/2881233/pexels-photo-2881233.jpeg",
+    "captured_at": "2024-02-06T12:00:00.000Z"
+  },
+  "message": "Images captured successfully"
+}
+```
+
+### 4. Refresh 3D Model
 
 **Endpoint:** `POST http://localhost:3001/api/refresh-model`
 

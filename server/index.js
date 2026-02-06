@@ -124,6 +124,32 @@ app.get('/api/models', async (req, res) => {
   }
 });
 
+app.post('/api/capture-images', async (req, res) => {
+  try {
+    const { camera1_url, camera2_url } = req.body;
+
+    if (!camera1_url || !camera2_url) {
+      return res.status(400).json({
+        error: 'Missing required fields: camera1_url, camera2_url'
+      });
+    }
+
+    const captureData = {
+      camera1_url,
+      camera2_url,
+      captured_at: new Date().toISOString()
+    };
+
+    res.json({
+      success: true,
+      data: captureData,
+      message: 'Images captured successfully'
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', message: 'API server is running' });
 });

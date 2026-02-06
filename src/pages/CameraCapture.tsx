@@ -142,6 +142,22 @@ export default function CameraCapture() {
       const captureTime = Math.floor(Math.random() * 200) + 150;
       await sleep(captureTime);
 
+      try {
+        const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+        await fetch(`${apiUrl}/api/capture-images`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            camera1_url: camera1Url,
+            camera2_url: camera2Url
+          })
+        });
+      } catch (error) {
+        console.error('Error sending images to API:', error);
+      }
+
       setCurrentCapture({
         camera1_url: camera1Url,
         camera2_url: camera2Url,
