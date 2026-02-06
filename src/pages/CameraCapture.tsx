@@ -244,7 +244,7 @@ export default function CameraCapture() {
               autoPlay
               playsInline
               muted
-              className="w-full h-40 bg-gray-700 rounded object-cover"
+              className="w-full h-64 bg-gray-700 rounded object-cover"
             />
             {cameraError && (
               <div className="text-xs text-yellow-400 mt-1">{cameraError}</div>
@@ -261,7 +261,7 @@ export default function CameraCapture() {
               autoPlay
               playsInline
               muted
-              className="w-full h-40 bg-gray-700 rounded object-cover"
+              className="w-full h-64 bg-gray-700 rounded object-cover"
             />
           </div>
         </div>
@@ -414,16 +414,12 @@ export default function CameraCapture() {
 
             {currentCapture.processing_time > 0 && (
               <div className="bg-gray-800/50 backdrop-blur-sm rounded-lg p-3 border border-gray-700">
-                <h2 className="text-sm font-semibold text-white mb-2">Analysis Results</h2>
-                <div className="space-y-2">
-                  <div className="bg-gray-700/50 rounded-lg p-3">
-                    <div className="flex items-center gap-2 mb-1">
-                      <Eye className="text-blue-400" size={14} />
-                      <h3 className="text-xs font-semibold text-white">Environment</h3>
-                    </div>
-                    <p className="text-gray-300 text-sm">{currentCapture.environment}</p>
-                  </div>
-
+                <div className="mb-2">
+                  <p className="text-xs text-gray-400 mb-1">Powered by</p>
+                  <h2 className="text-sm font-semibold text-white mb-2">Analysis Results</h2>
+                  <p className="text-xs text-blue-400 font-mono">Qwen 7b AI Edge Model</p>
+                </div>
+                <div className="space-y-2 mt-3">
                   <div className="bg-gray-700/50 rounded-lg p-3">
                     <div className="flex items-center gap-2 mb-1">
                       <Camera className="text-blue-400" size={14} />
@@ -435,6 +431,14 @@ export default function CameraCapture() {
                       className="w-full bg-gray-800 text-gray-300 text-sm rounded p-2 border border-gray-600 resize-none"
                       rows={4}
                     />
+                  </div>
+
+                  <div className="bg-gray-700/50 rounded-lg p-3">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Eye className="text-blue-400" size={14} />
+                      <h3 className="text-xs font-semibold text-white">Environment</h3>
+                    </div>
+                    <p className="text-gray-300 text-sm">{currentCapture.environment}</p>
                   </div>
 
                   <div className="grid grid-cols-2 gap-2">

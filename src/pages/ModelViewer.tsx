@@ -21,7 +21,10 @@ export default function ModelViewer() {
   const [roughness, setRoughness] = useState(0.4);
   const [renderMode, setRenderMode] = useState<'webgpu' | 'webgl'>('webgl');
   const [fps, setFps] = useState(0);
-  const [vertexCount, setVertexCount] = useState(0);
+  const [rotationX, setRotationX] = useState(0);
+  const [rotationY, setRotationY] = useState(0);
+  const [rotationZ, setRotationZ] = useState(0);
+  const [solidMode, setSolidMode] = useState(true);
 
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
@@ -195,6 +198,44 @@ export default function ModelViewer() {
     }
   }, [metalness, roughness]);
 
+  useEffect(() => {
+    if (modelRef.current) {
+      modelRef.current.rotation.x = rotationX * (Math.PI / 180);
+      modelRef.current.rotation.y = rotationY * (Math.PI / 180);
+      modelRef.current.rotation.z = rotationZ * (Math.PI / 180);
+    }
+  }, [rotationX, rotationY, rotationZ]);
+
+  useEffect(() => {
+    if (modelRef.current) {
+      modelRef.current.traverse((child: any) => {
+        if (child.isMesh && child.material) {
+          if (!solidMode) {
+            child.material.visible = false;
+            if (!child.userData.pointsObject) {
+              const points = new THREE.Points(
+                child.geometry,
+                new THREE.PointsMaterial({
+                  size: 0.02,
+                  vertexColors: child.geometry.attributes.color !== undefined,
+                  color: child.geometry.attributes.color !== undefined ? 0xffffff : 0x00a8ff
+                })
+              );
+              sceneRef.current?.add(points);
+              child.userData.pointsObject = points;
+            }
+          } else {
+            child.material.visible = true;
+            if (child.userData.pointsObject) {
+              sceneRef.current?.remove(child.userData.pointsObject);
+              child.userData.pointsObject = null;
+            }
+          }
+        }
+      });
+    }
+  }, [solidMode]);
+
   const loadLatestModel = () => {
     try {
       const latestCapture = localStorage.getItem('latest_capture');
@@ -296,14 +337,6 @@ export default function ModelViewer() {
             sceneRef.current!.add(model);
             modelRef.current = model as any;
 
-            let totalVertices = 0;
-            model.traverse((child: any) => {
-              if (child.isMesh && child.geometry) {
-                totalVertices += child.geometry.attributes.position?.count || 0;
-              }
-            });
-            setVertexCount(totalVertices);
-
             setHasModel(true);
             setIsLoading(false);
             setError(null);
@@ -400,7 +433,6 @@ export default function ModelViewer() {
 
             sceneRef.current!.add(mesh);
             modelRef.current = mesh;
-            setVertexCount(geometry.attributes.position?.count || 0);
             setHasModel(true);
             setIsLoading(false);
             setError(null);
@@ -578,10 +610,6 @@ export default function ModelViewer() {
                       <span className="text-gray-400">FPS:</span>
                       <span className="text-green-400 font-mono">{fps}</span>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">Vertices:</span>
-                      <span className="text-purple-400 font-mono">{vertexCount.toLocaleString()}</span>
-                    </div>
                   </div>
                 </div>
 
@@ -613,8 +641,68 @@ export default function ModelViewer() {
                 </div>
 
                 <div className="border-t border-gray-700 pt-4">
+                  <h4 className="text-sm font-semibold text-gray-400 mb-3">ROTATION</h4>
+                  <div className="space-y-4">
+                    <div>
+                      <div className="flex justify-between text-sm mb-2">
+                        <span>X-Axis</span>
+                        <span className="text-blue-400 font-mono">{rotationX}°</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0"
+                        max="360"
+                        step="1"
+                        value={rotationX}
+                        onChange={(e) => setRotationX(parseFloat(e.target.value))}
+                        className="w-full accent-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <div className="flex justify-between text-sm mb-2">
+                        <span>Y-Axis</span>
+                        <span className="text-blue-400 font-mono">{rotationY}°</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0"
+                        max="360"
+                        step="1"
+                        value={rotationY}
+                        onChange={(e) => setRotationY(parseFloat(e.target.value))}
+                        className="w-full accent-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <div className="flex justify-between text-sm mb-2">
+                        <span>Z-Axis</span>
+                        <span className="text-blue-400 font-mono">{rotationZ}°</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0"
+                        max="360"
+                        step="1"
+                        value={rotationZ}
+                        onChange={(e) => setRotationZ(parseFloat(e.target.value))}
+                        className="w-full accent-blue-500"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="border-t border-gray-700 pt-4">
                   <h4 className="text-sm font-semibold text-gray-400 mb-3">DISPLAY</h4>
                   <div className="space-y-3">
+                    <label className="flex items-center justify-between cursor-pointer">
+                      <span className="text-sm">Solid Render</span>
+                      <input
+                        type="checkbox"
+                        checked={solidMode}
+                        onChange={(e) => setSolidMode(e.target.checked)}
+                        className="w-5 h-5 rounded bg-gray-700 border-gray-600 text-blue-500 focus:ring-blue-500"
+                      />
+                    </label>
                     <label className="flex items-center justify-between cursor-pointer">
                       <span className="text-sm">Wireframe Mode</span>
                       <input
