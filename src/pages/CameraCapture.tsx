@@ -69,82 +69,64 @@ export default function CameraCapture() {
   const [currentCapture, setCurrentCapture] = useState<CaptureData | null>(null);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [currentStep, setCurrentStep] = useState(0);
-  const video1Ref = useRef<HTMLVideoElement>(null);
-  const video2Ref = useRef<HTMLVideoElement>(null);
-  const stream1Ref = useRef<MediaStream | null>(null);
-  const stream2Ref = useRef<MediaStream | null>(null);
+  const [liveFeeds, setLiveFeeds] = useState<{camera1: string | null, camera2: string | null}>({
+    camera1: null,
+    camera2: null
+  });
   const broadcastRef = useRef<BroadcastChannel | null>(null);
+  const feedIntervalRef = useRef<number | null>(null);
 
   useEffect(() => {
-    initializeCameras();
+    fetchCameraFeeds();
     broadcastRef.current = new BroadcastChannel('capture_channel');
 
+    feedIntervalRef.current = window.setInterval(() => {
+      fetchCameraFeeds();
+    }, 1000);
+
     return () => {
-      stopCameras();
+      if (feedIntervalRef.current) {
+        clearInterval(feedIntervalRef.current);
+      }
       broadcastRef.current?.close();
     };
   }, []);
 
-  const initializeCameras = async () => {
+  const fetchCameraFeeds = async () => {
     try {
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      const videoDevices = devices.filter(device => device.kind === 'videoinput');
+      const response = await fetch('http://localhost:3001/api/camera-feeds');
+      if (response.ok) {
+        const result = await response.json();
+        const stockCamera1 = 'https://images.pexels.com/photos/1108099/pexels-photo-1108099.jpeg?auto=compress&cs=tinysrgb&w=800';
+        const stockCamera2 = 'https://images.pexels.com/photos/2881233/pexels-photo-2881233.jpeg?auto=compress&cs=tinysrgb&w=800';
 
-      if (videoDevices.length >= 1) {
-        const stream1 = await navigator.mediaDevices.getUserMedia({
-          video: { deviceId: videoDevices[0].deviceId }
+        setLiveFeeds({
+          camera1: result.data.camera1 || stockCamera1,
+          camera2: result.data.camera2 || stockCamera2
         });
-        if (video1Ref.current) {
-          video1Ref.current.srcObject = stream1;
-          stream1Ref.current = stream1;
-        }
-      }
 
-      if (videoDevices.length >= 2) {
-        const stream2 = await navigator.mediaDevices.getUserMedia({
-          video: { deviceId: videoDevices[1].deviceId }
-        });
-        if (video2Ref.current) {
-          video2Ref.current.srcObject = stream2;
-          stream2Ref.current = stream2;
-        }
-      } else if (videoDevices.length >= 1) {
-        const stream2 = await navigator.mediaDevices.getUserMedia({ video: true });
-        if (video2Ref.current) {
-          video2Ref.current.srcObject = stream2;
-          stream2Ref.current = stream2;
+        if (!result.data.camera1 || !result.data.camera2) {
+          if (!cameraError) {
+            setCameraError('RTSP streams unavailable. Showing stock images.');
+          }
+        } else {
+          setCameraError(null);
         }
       }
     } catch (error) {
-      console.error('Error accessing cameras:', error);
-      setCameraError('Unable to access cameras. Using simulated feeds.');
+      console.error('Error fetching camera feeds:', error);
+      if (!cameraError) {
+        setCameraError('Unable to connect to camera server. Showing stock images.');
+      }
+
+      const stockCamera1 = 'https://images.pexels.com/photos/1108099/pexels-photo-1108099.jpeg?auto=compress&cs=tinysrgb&w=800';
+      const stockCamera2 = 'https://images.pexels.com/photos/2881233/pexels-photo-2881233.jpeg?auto=compress&cs=tinysrgb&w=800';
+
+      setLiveFeeds({
+        camera1: stockCamera1,
+        camera2: stockCamera2
+      });
     }
-  };
-
-  const stopCameras = () => {
-    if (stream1Ref.current) {
-      stream1Ref.current.getTracks().forEach(track => track.stop());
-    }
-    if (stream2Ref.current) {
-      stream2Ref.current.getTracks().forEach(track => track.stop());
-    }
-  };
-
-  const captureFrameFromVideo = (videoElement: HTMLVideoElement): string | null => {
-    if (!videoElement || videoElement.readyState !== videoElement.HAVE_ENOUGH_DATA) {
-      return null;
-    }
-
-    const canvas = document.createElement('canvas');
-    canvas.width = videoElement.videoWidth || 640;
-    canvas.height = videoElement.videoHeight || 480;
-
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return null;
-
-    ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
-
-    return canvas.toDataURL('image/jpeg', 0.8);
   };
 
   const fetchWithTimeout = async (url: string, options: RequestInit, timeout: number = 10000): Promise<Response> => {
@@ -170,22 +152,8 @@ export default function CameraCapture() {
       setCurrentCapture(null);
       setCurrentStep(1);
 
-      let camera1Image: string | null = null;
-      let camera2Image: string | null = null;
-
-      if (video1Ref.current) {
-        camera1Image = captureFrameFromVideo(video1Ref.current);
-      }
-      if (video2Ref.current) {
-        camera2Image = captureFrameFromVideo(video2Ref.current);
-      }
-
-      if (!camera1Image) {
-        camera1Image = 'https://images.pexels.com/photos/1108099/pexels-photo-1108099.jpeg?auto=compress&cs=tinysrgb&w=800';
-      }
-      if (!camera2Image) {
-        camera2Image = 'https://images.pexels.com/photos/2881233/pexels-photo-2881233.jpeg?auto=compress&cs=tinysrgb&w=800';
-      }
+      const camera1Image = liveFeeds.camera1 || 'https://images.pexels.com/photos/1108099/pexels-photo-1108099.jpeg?auto=compress&cs=tinysrgb&w=800';
+      const camera2Image = liveFeeds.camera2 || 'https://images.pexels.com/photos/2881233/pexels-photo-2881233.jpeg?auto=compress&cs=tinysrgb&w=800';
 
       setCurrentCapture({
         camera1_url: camera1Image,
@@ -331,13 +299,17 @@ export default function CameraCapture() {
               <Camera className="text-blue-400" size={16} />
               <h2 className="text-sm font-semibold text-white">Camera 1 - Live Feed</h2>
             </div>
-            <video
-              ref={video1Ref}
-              autoPlay
-              playsInline
-              muted
-              className="w-full h-64 bg-gray-700 rounded object-cover"
-            />
+            {liveFeeds.camera1 ? (
+              <img
+                src={liveFeeds.camera1}
+                alt="Camera 1 Feed"
+                className="w-full h-64 bg-gray-700 rounded object-cover"
+              />
+            ) : (
+              <div className="w-full h-64 bg-gray-700 rounded flex items-center justify-center">
+                <Loader2 className="animate-spin text-gray-500" size={24} />
+              </div>
+            )}
             {cameraError && (
               <div className="text-xs text-yellow-400 mt-1">{cameraError}</div>
             )}
@@ -348,13 +320,17 @@ export default function CameraCapture() {
               <Camera className="text-blue-400" size={16} />
               <h2 className="text-sm font-semibold text-white">Camera 2 - Live Feed</h2>
             </div>
-            <video
-              ref={video2Ref}
-              autoPlay
-              playsInline
-              muted
-              className="w-full h-64 bg-gray-700 rounded object-cover"
-            />
+            {liveFeeds.camera2 ? (
+              <img
+                src={liveFeeds.camera2}
+                alt="Camera 2 Feed"
+                className="w-full h-64 bg-gray-700 rounded object-cover"
+              />
+            ) : (
+              <div className="w-full h-64 bg-gray-700 rounded flex items-center justify-center">
+                <Loader2 className="animate-spin text-gray-500" size={24} />
+              </div>
+            )}
           </div>
         </div>
 

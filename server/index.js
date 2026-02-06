@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import { saveAnalysis, getAnalyses, saveTimestamp, getTimestamps, saveModelPath, getModels } from './storage.js';
+import { initPeriodicCapture, getLastCaptures, hasCaptureAttempts } from './rtspCapture.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -124,9 +125,29 @@ app.get('/api/models', async (req, res) => {
   }
 });
 
+app.get('/api/camera-feeds', (req, res) => {
+  try {
+    const captures = getLastCaptures();
+    const attempted = hasCaptureAttempts();
+
+    res.json({
+      success: true,
+      data: {
+        camera1: captures.camera1,
+        camera2: captures.camera2,
+        attempted
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', message: 'API server is running' });
 });
+
+initPeriodicCapture(5000);
 
 app.listen(PORT, () => {
   console.log(`API server running on port ${PORT}`);
