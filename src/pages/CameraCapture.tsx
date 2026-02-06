@@ -204,14 +204,13 @@ export default function CameraCapture() {
       });
 
       let apiResponse: any = null;
-      let useFallback = false;
 
       try {
-        const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+        const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3005';
         console.log('Sending images to API...');
 
         const response = await fetchWithTimeout(
-          `${apiUrl}/api/capture-images`,
+          `${apiUrl}/images`,
           {
             method: 'POST',
             headers: {
@@ -227,111 +226,67 @@ export default function CameraCapture() {
 
         if (response.ok) {
           const result = await response.json();
-          apiResponse = result.data;
+          apiResponse = result;
           console.log('Received API response:', apiResponse);
         } else {
           console.warn('API returned non-OK status:', response.status);
-          useFallback = true;
         }
       } catch (error) {
-        console.error('Error calling API (using fallback):', error);
-        useFallback = true;
+        console.error('Error calling API, will use stock values for missing data:', error);
       }
 
-      if (useFallback) {
-        console.log('Using fallback values due to API timeout or error');
-        const captureTime = Math.floor(Math.random() * 200) + 150;
-        await sleep(captureTime);
+      const stockAnalysis = simulateAnalysis();
 
-        setCurrentCapture(prev => prev ? {
-          ...prev,
-          images_captured_time: captureTime
-        } : null);
-        setCurrentStep(2);
+      const captureTime = apiResponse?.images_captured_time ?? Math.floor(Math.random() * 200) + 150;
+      const splattingTime = apiResponse?.gaussian_splatting_time ?? Math.floor(Math.random() * 1500) + 1000;
+      const processingTime = apiResponse?.processing_time ?? Math.floor(Math.random() * 800) + 500;
+      const plyUrl = apiResponse?.ply_file_url ?? 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/models/ply/ascii/dolphins.ply';
 
-        const splattingTime = Math.floor(Math.random() * 1500) + 1000;
-        await sleep(splattingTime);
+      setCurrentStep(2);
+      setCurrentCapture(prev => prev ? {
+        ...prev,
+        images_captured_time: captureTime
+      } : null);
+      await sleep(captureTime);
 
-        const plyUrl = 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/models/ply/ascii/dolphins.ply';
+      setCurrentStep(3);
+      setCurrentCapture(prev => prev ? {
+        ...prev,
+        gaussian_splatting_time: splattingTime,
+        ply_file_url: plyUrl
+      } : null);
+      await sleep(splattingTime);
 
-        setCurrentCapture(prev => prev ? {
-          ...prev,
-          gaussian_splatting_time: splattingTime,
-          ply_file_url: plyUrl
-        } : null);
-        setCurrentStep(3);
+      setCurrentCapture(prev => prev ? {
+        ...prev,
+        processing_time: processingTime
+      } : null);
+      await sleep(processingTime);
 
-        const processingTime = Math.floor(Math.random() * 800) + 500;
-        await sleep(processingTime);
+      const totalTime = apiResponse?.total_time ?? (captureTime + splattingTime + processingTime);
 
-        const analysis = simulateAnalysis();
-        const totalTime = captureTime + splattingTime + processingTime;
+      const finalResult: CaptureData = {
+        camera1_url: camera1Image,
+        camera2_url: camera2Image,
+        ply_file_url: plyUrl,
+        images_captured_time: captureTime,
+        gaussian_splatting_time: splattingTime,
+        processing_time: processingTime,
+        total_time: totalTime,
+        environment: apiResponse?.environment ?? stockAnalysis.environment,
+        activity: apiResponse?.activity ?? stockAnalysis.activity,
+        people_count: apiResponse?.people_count ?? stockAnalysis.people_count,
+        threats: apiResponse?.threats ?? stockAnalysis.threats,
+        is_anomaly: apiResponse?.is_anomaly ?? stockAnalysis.is_anomaly,
+        anomaly_reason: apiResponse?.anomaly_reason ?? stockAnalysis.anomaly_reason
+      };
 
-        const finalResult: CaptureData = {
-          camera1_url: camera1Image,
-          camera2_url: camera2Image,
-          ply_file_url: plyUrl,
-          images_captured_time: captureTime,
-          gaussian_splatting_time: splattingTime,
-          processing_time: processingTime,
-          total_time: totalTime,
-          ...analysis
-        };
+      setCurrentCapture(finalResult);
+      setIsCapturing(false);
+      setCurrentStep(0);
 
-        setCurrentCapture(finalResult);
-        setIsCapturing(false);
-        setCurrentStep(0);
-
-        localStorage.setItem('latest_capture', JSON.stringify(finalResult));
-        broadcastRef.current?.postMessage({ type: 'capture_complete', data: finalResult });
-      } else {
-        setCurrentStep(2);
-        setCurrentCapture(prev => prev ? {
-          ...prev,
-          images_captured_time: apiResponse.images_captured_time
-        } : null);
-
-        await sleep(apiResponse.images_captured_time);
-
-        setCurrentStep(3);
-        setCurrentCapture(prev => prev ? {
-          ...prev,
-          gaussian_splatting_time: apiResponse.gaussian_splatting_time,
-          ply_file_url: apiResponse.ply_file_url
-        } : null);
-
-        await sleep(apiResponse.gaussian_splatting_time);
-
-        setCurrentCapture(prev => prev ? {
-          ...prev,
-          processing_time: apiResponse.processing_time
-        } : null);
-
-        await sleep(apiResponse.processing_time);
-
-        const finalResult: CaptureData = {
-          camera1_url: camera1Image,
-          camera2_url: camera2Image,
-          ply_file_url: apiResponse.ply_file_url,
-          images_captured_time: apiResponse.images_captured_time,
-          gaussian_splatting_time: apiResponse.gaussian_splatting_time,
-          processing_time: apiResponse.processing_time,
-          total_time: apiResponse.total_time,
-          environment: apiResponse.environment,
-          activity: apiResponse.activity,
-          people_count: apiResponse.people_count,
-          threats: apiResponse.threats,
-          is_anomaly: apiResponse.is_anomaly,
-          anomaly_reason: apiResponse.anomaly_reason
-        };
-
-        setCurrentCapture(finalResult);
-        setIsCapturing(false);
-        setCurrentStep(0);
-
-        localStorage.setItem('latest_capture', JSON.stringify(finalResult));
-        broadcastRef.current?.postMessage({ type: 'capture_complete', data: finalResult });
-      }
+      localStorage.setItem('latest_capture', JSON.stringify(finalResult));
+      broadcastRef.current?.postMessage({ type: 'capture_complete', data: finalResult });
     } catch (error) {
       console.error('Error starting capture:', error);
       setIsCapturing(false);

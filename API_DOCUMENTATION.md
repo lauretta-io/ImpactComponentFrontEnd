@@ -8,13 +8,13 @@ This project includes a simple Express API server with file-based storage.
 npm run server
 ```
 
-The server runs on port 3001 by default.
+The server runs on port 3005 by default.
 
 ## API Endpoints
 
 ### 1. Update Analysis Data
 
-**Endpoint:** `POST http://localhost:3001/api/update-analysis`
+**Endpoint:** `POST http://localhost:3005/api/update-analysis`
 
 **Description:** Create or update analysis data.
 
@@ -51,7 +51,7 @@ The server runs on port 3001 by default.
 
 ### 2. Record Timestamp
 
-**Endpoint:** `POST http://localhost:3001/api/record-timestamp`
+**Endpoint:** `POST http://localhost:3005/api/record-timestamp`
 
 **Description:** Record processing timestamps for various events.
 
@@ -85,7 +85,7 @@ The server runs on port 3001 by default.
 
 ### 3. Capture and Process Images
 
-**Endpoint:** `POST http://localhost:3001/api/capture-images`
+**Endpoint:** `POST http://localhost:3005/images`
 
 **Description:** Called automatically when the "Capture Image" button is pressed. Receives both camera images as base64-encoded JPEG data, processes them, and returns complete analysis results including timings. The processing includes image capture, Gaussian splatting, and AI-powered scene analysis.
 
@@ -100,29 +100,22 @@ The server runs on port 3001 by default.
 **Response:**
 ```json
 {
-  "success": true,
-  "data": {
-    "camera1_image": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAA...",
-    "camera2_image": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAA...",
-    "images_captured_time": 178,
-    "gaussian_splatting_time": 1234,
-    "processing_time": 567,
-    "total_time": 1979,
-    "ply_file_url": "https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/models/ply/ascii/dolphins.ply",
-    "environment": "Urban street",
-    "activity": "People walking normally in an orderly fashion. Some individuals are checking their phones...",
-    "people_count": 8,
-    "threats": "None detected",
-    "is_anomaly": false,
-    "anomaly_reason": "Normal activity for this environment with expected patterns and behavior",
-    "captured_at": "2024-02-06T12:00:00.000Z"
-  },
-  "message": "Images processed successfully"
+  "images_captured_time": 178,
+  "gaussian_splatting_time": 1234,
+  "processing_time": 567,
+  "total_time": 1979,
+  "ply_file_url": "https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/models/ply/ascii/dolphins.ply",
+  "environment": "Urban street",
+  "activity": "People walking normally in an orderly fashion. Some individuals are checking their phones...",
+  "people_count": 8,
+  "threats": "None detected",
+  "is_anomaly": false,
+  "anomaly_reason": "Normal activity for this environment with expected patterns and behavior",
+  "captured_at": "2024-02-06T12:00:00.000Z"
 }
 ```
 
 **Response Fields:**
-- `camera1_image`, `camera2_image` - Original base64 images
 - `images_captured_time` - Time taken to capture images (ms)
 - `gaussian_splatting_time` - Time taken for 3D reconstruction (ms)
 - `processing_time` - Time taken for AI analysis (ms)
@@ -134,22 +127,25 @@ The server runs on port 3001 by default.
 - `threats` - Identified threats or "None detected"
 - `is_anomaly` - Boolean indicating if anomaly detected
 - `anomaly_reason` - Explanation of anomaly status
+- `captured_at` - Timestamp when processing completed
 
 **Behavior:**
 - The endpoint processes images and simulates the complete pipeline
 - Response time matches the total_time to simulate actual processing
 - Frontend waits up to 10 seconds for response
-- If no response within 10 seconds, frontend falls back to local simulation
+- **If response is not received within 10 seconds OR any fields are missing, stock values are used for missing data only**
+- Each missing field is individually replaced with a generated stock value
 
 **Notes:**
 - Images are captured as base64-encoded data URLs from the live camera feeds
 - If camera access is unavailable, fallback stock images are used
 - Processing includes Gaussian splatting for 3D reconstruction
 - AI analysis powered by Qwen 7b edge model (simulated)
+- The system gracefully handles partial responses by filling in only missing values
 
 ### 4. Refresh 3D Model
 
-**Endpoint:** `POST http://localhost:3001/api/refresh-model`
+**Endpoint:** `POST http://localhost:3005/api/refresh-model`
 
 **Description:** Refresh the 3D model view with a folder name.
 
@@ -178,16 +174,16 @@ The server runs on port 3001 by default.
 ## GET Endpoints (for retrieving data)
 
 ### Get All Analyses
-`GET http://localhost:3001/api/analyses`
+`GET http://localhost:3005/api/analyses`
 
 ### Get All Timestamps
-`GET http://localhost:3001/api/timestamps`
+`GET http://localhost:3005/api/timestamps`
 
 ### Get All Models
-`GET http://localhost:3001/api/models`
+`GET http://localhost:3005/api/models`
 
 ### Health Check
-`GET http://localhost:3001/health`
+`GET http://localhost:3005/health`
 
 ## Data Storage
 

@@ -3,7 +3,7 @@ import cors from 'cors';
 import { saveAnalysis, getAnalyses, saveTimestamp, getTimestamps, saveModelPath, getModels } from './storage.js';
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3005;
 
 app.use(cors());
 app.use(express.json());
@@ -171,7 +171,7 @@ function simulateProcessing() {
   };
 }
 
-app.post('/api/capture-images', async (req, res) => {
+app.post('/images', async (req, res) => {
   try {
     const { camera1_image, camera2_image } = req.body;
 
@@ -195,14 +195,8 @@ app.post('/api/capture-images', async (req, res) => {
     });
 
     res.json({
-      success: true,
-      data: {
-        camera1_image,
-        camera2_image,
-        ...processingResults,
-        captured_at: new Date().toISOString()
-      },
-      message: 'Images processed successfully'
+      ...processingResults,
+      captured_at: new Date().toISOString()
     });
   } catch (error) {
     console.error('Error processing images:', error);
