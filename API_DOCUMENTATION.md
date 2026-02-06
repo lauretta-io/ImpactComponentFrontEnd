@@ -83,11 +83,11 @@ The server runs on port 3001 by default.
 }
 ```
 
-### 3. Capture Images
+### 3. Capture and Process Images
 
 **Endpoint:** `POST http://localhost:3001/api/capture-images`
 
-**Description:** Called automatically when the "Capture Image" button is pressed. Receives both camera images as base64-encoded JPEG data captured from the live video feeds.
+**Description:** Called automatically when the "Capture Image" button is pressed. Receives both camera images as base64-encoded JPEG data, processes them, and returns complete analysis results including timings. The processing includes image capture, Gaussian splatting, and AI-powered scene analysis.
 
 **Request Body:**
 ```json
@@ -102,18 +102,50 @@ The server runs on port 3001 by default.
 {
   "success": true,
   "data": {
-    "captured_at": "2024-02-06T12:00:00.000Z",
-    "image_size_camera1": 45230,
-    "image_size_camera2": 47891
+    "camera1_image": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAA...",
+    "camera2_image": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAA...",
+    "images_captured_time": 178,
+    "gaussian_splatting_time": 1234,
+    "processing_time": 567,
+    "total_time": 1979,
+    "ply_file_url": "https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/models/ply/ascii/dolphins.ply",
+    "environment": "Urban street",
+    "activity": "People walking normally in an orderly fashion. Some individuals are checking their phones...",
+    "people_count": 8,
+    "threats": "None detected",
+    "is_anomaly": false,
+    "anomaly_reason": "Normal activity for this environment with expected patterns and behavior",
+    "captured_at": "2024-02-06T12:00:00.000Z"
   },
-  "message": "Images captured successfully"
+  "message": "Images processed successfully"
 }
 ```
+
+**Response Fields:**
+- `camera1_image`, `camera2_image` - Original base64 images
+- `images_captured_time` - Time taken to capture images (ms)
+- `gaussian_splatting_time` - Time taken for 3D reconstruction (ms)
+- `processing_time` - Time taken for AI analysis (ms)
+- `total_time` - Total processing time (ms)
+- `ply_file_url` - URL to the generated 3D model
+- `environment` - Detected environment type
+- `activity` - Detailed activity description
+- `people_count` - Number of people detected
+- `threats` - Identified threats or "None detected"
+- `is_anomaly` - Boolean indicating if anomaly detected
+- `anomaly_reason` - Explanation of anomaly status
+
+**Behavior:**
+- The endpoint processes images and simulates the complete pipeline
+- Response time matches the total_time to simulate actual processing
+- Frontend waits up to 10 seconds for response
+- If no response within 10 seconds, frontend falls back to local simulation
 
 **Notes:**
 - Images are captured as base64-encoded data URLs from the live camera feeds
 - If camera access is unavailable, fallback stock images are used
-- Image sizes are returned in bytes (base64 string length)
+- Processing includes Gaussian splatting for 3D reconstruction
+- AI analysis powered by Qwen 7b edge model (simulated)
 
 ### 4. Refresh 3D Model
 

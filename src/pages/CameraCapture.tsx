@@ -147,6 +147,23 @@ export default function CameraCapture() {
     return canvas.toDataURL('image/jpeg', 0.8);
   };
 
+  const fetchWithTimeout = async (url: string, options: RequestInit, timeout: number = 10000): Promise<Response> => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+    try {
+      const response = await fetch(url, {
+        ...options,
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+      return response;
+    } catch (error) {
+      clearTimeout(timeoutId);
+      throw error;
+    }
+  };
+
   const startCapture = async () => {
     try {
       setIsCapturing(true);
@@ -170,33 +187,11 @@ export default function CameraCapture() {
         camera2Image = 'https://images.pexels.com/photos/2881233/pexels-photo-2881233.jpeg?auto=compress&cs=tinysrgb&w=800';
       }
 
-      const captureTime = Math.floor(Math.random() * 200) + 150;
-      await sleep(captureTime);
-
-      try {
-        const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
-        await fetch(`${apiUrl}/api/capture-images`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            camera1_image: camera1Image,
-            camera2_image: camera2Image
-          })
-        });
-      } catch (error) {
-        console.error('Error sending images to API:', error);
-      }
-
-      const camera1Url = camera1Image;
-      const camera2Url = camera2Image;
-
       setCurrentCapture({
-        camera1_url: camera1Url,
-        camera2_url: camera2Url,
+        camera1_url: camera1Image,
+        camera2_url: camera2Image,
         ply_file_url: null,
-        images_captured_time: captureTime,
+        images_captured_time: 0,
         gaussian_splatting_time: 0,
         processing_time: 0,
         total_time: 0,
@@ -207,43 +202,136 @@ export default function CameraCapture() {
         is_anomaly: false,
         anomaly_reason: null
       });
-      setCurrentStep(2);
 
-      const splattingTime = Math.floor(Math.random() * 1500) + 1000;
-      await sleep(splattingTime);
+      let apiResponse: any = null;
+      let useFallback = false;
 
-      const plyUrl = 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/models/ply/ascii/dolphins.ply';
+      try {
+        const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+        console.log('Sending images to API...');
 
-      setCurrentCapture(prev => prev ? {
-        ...prev,
-        gaussian_splatting_time: splattingTime,
-        ply_file_url: plyUrl
-      } : null);
-      setCurrentStep(3);
+        const response = await fetchWithTimeout(
+          `${apiUrl}/api/capture-images`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              camera1_image: camera1Image,
+              camera2_image: camera2Image
+            })
+          },
+          10000
+        );
 
-      const processingTime = Math.floor(Math.random() * 800) + 500;
-      await sleep(processingTime);
+        if (response.ok) {
+          const result = await response.json();
+          apiResponse = result.data;
+          console.log('Received API response:', apiResponse);
+        } else {
+          console.warn('API returned non-OK status:', response.status);
+          useFallback = true;
+        }
+      } catch (error) {
+        console.error('Error calling API (using fallback):', error);
+        useFallback = true;
+      }
 
-      const analysis = simulateAnalysis();
-      const totalTime = captureTime + splattingTime + processingTime;
+      if (useFallback) {
+        console.log('Using fallback values due to API timeout or error');
+        const captureTime = Math.floor(Math.random() * 200) + 150;
+        await sleep(captureTime);
 
-      const finalResult: CaptureData = {
-        camera1_url: camera1Url,
-        camera2_url: camera2Url,
-        ply_file_url: plyUrl,
-        images_captured_time: captureTime,
-        gaussian_splatting_time: splattingTime,
-        processing_time: processingTime,
-        total_time: totalTime,
-        ...analysis
-      };
+        setCurrentCapture(prev => prev ? {
+          ...prev,
+          images_captured_time: captureTime
+        } : null);
+        setCurrentStep(2);
 
-      setCurrentCapture(finalResult);
-      setIsCapturing(false);
-      setCurrentStep(0);
+        const splattingTime = Math.floor(Math.random() * 1500) + 1000;
+        await sleep(splattingTime);
 
-      localStorage.setItem('latest_capture', JSON.stringify(finalResult));
-      broadcastRef.current?.postMessage({ type: 'capture_complete', data: finalResult });
+        const plyUrl = 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/models/ply/ascii/dolphins.ply';
+
+        setCurrentCapture(prev => prev ? {
+          ...prev,
+          gaussian_splatting_time: splattingTime,
+          ply_file_url: plyUrl
+        } : null);
+        setCurrentStep(3);
+
+        const processingTime = Math.floor(Math.random() * 800) + 500;
+        await sleep(processingTime);
+
+        const analysis = simulateAnalysis();
+        const totalTime = captureTime + splattingTime + processingTime;
+
+        const finalResult: CaptureData = {
+          camera1_url: camera1Image,
+          camera2_url: camera2Image,
+          ply_file_url: plyUrl,
+          images_captured_time: captureTime,
+          gaussian_splatting_time: splattingTime,
+          processing_time: processingTime,
+          total_time: totalTime,
+          ...analysis
+        };
+
+        setCurrentCapture(finalResult);
+        setIsCapturing(false);
+        setCurrentStep(0);
+
+        localStorage.setItem('latest_capture', JSON.stringify(finalResult));
+        broadcastRef.current?.postMessage({ type: 'capture_complete', data: finalResult });
+      } else {
+        setCurrentStep(2);
+        setCurrentCapture(prev => prev ? {
+          ...prev,
+          images_captured_time: apiResponse.images_captured_time
+        } : null);
+
+        await sleep(apiResponse.images_captured_time);
+
+        setCurrentStep(3);
+        setCurrentCapture(prev => prev ? {
+          ...prev,
+          gaussian_splatting_time: apiResponse.gaussian_splatting_time,
+          ply_file_url: apiResponse.ply_file_url
+        } : null);
+
+        await sleep(apiResponse.gaussian_splatting_time);
+
+        setCurrentCapture(prev => prev ? {
+          ...prev,
+          processing_time: apiResponse.processing_time
+        } : null);
+
+        await sleep(apiResponse.processing_time);
+
+        const finalResult: CaptureData = {
+          camera1_url: camera1Image,
+          camera2_url: camera2Image,
+          ply_file_url: apiResponse.ply_file_url,
+          images_captured_time: apiResponse.images_captured_time,
+          gaussian_splatting_time: apiResponse.gaussian_splatting_time,
+          processing_time: apiResponse.processing_time,
+          total_time: apiResponse.total_time,
+          environment: apiResponse.environment,
+          activity: apiResponse.activity,
+          people_count: apiResponse.people_count,
+          threats: apiResponse.threats,
+          is_anomaly: apiResponse.is_anomaly,
+          anomaly_reason: apiResponse.anomaly_reason
+        };
+
+        setCurrentCapture(finalResult);
+        setIsCapturing(false);
+        setCurrentStep(0);
+
+        localStorage.setItem('latest_capture', JSON.stringify(finalResult));
+        broadcastRef.current?.postMessage({ type: 'capture_complete', data: finalResult });
+      }
     } catch (error) {
       console.error('Error starting capture:', error);
       setIsCapturing(false);
