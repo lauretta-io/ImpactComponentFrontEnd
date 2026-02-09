@@ -9,6 +9,8 @@ const PORT = process.env.PORT || 3001;
 app.use(cors());
 app.use(express.json());
 
+app.use('/output', express.static('output'));
+
 app.post('/api/update-analysis', async (req, res) => {
   try {
     const { environment, description, number_of_people, threats, is_anomaly, anomaly_reason, analysis_id } = req.body;
@@ -94,7 +96,7 @@ app.post('/api/refresh-model', async (req, res) => {
     }
 
     const supportedExtensions = ['.ply', '.gltf', '.glb'];
-    const modelUrl = `/${folder_name}/output.ply`;
+    const modelUrl = `${folder_name}/output.glb`;
 
     const modelData = {
       folder_name,
